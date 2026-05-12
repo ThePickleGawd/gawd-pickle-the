@@ -1,5 +1,6 @@
 import os
 from typing import BinaryIO
+import regex as re
 
 
 def find_chunk_boundaries(
@@ -49,14 +50,34 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 
-## Usage
-with open(..., "rb") as f:
-    num_processes = 4
-    boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+def get_pretoken_map(file_path, special_tokens=[]):
+    with open(file_path, "rb") as f:
+        num_processes = 4
+        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
-    # The following is a serial implementation, but you can parallelize this
-    # by sending each start/end pair to a set of processes.
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
-        f.seek(start)
-        chunk = f.read(end - start).decode("utf-8", errors="ignore")
-        # Run pre-tokenization on your chunk and store the counts for each pre-token
+        pretoken_cnts = {}
+
+        # The following is a serial implementation, but you can parallelize this
+        # by sending each start/end pair to a set of processes.
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            f.seek(start)
+            chunk = f.read(end - start).decode("utf-8", errors="ignore")
+            # Run pre-tokenization on your chunk and store the counts for each pre-token
+            pretoken_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+            special_tokens_regex = "|".join(re.escape(token) for token in special_tokens)
+
+            pretoken_chunks = re.split(special_tokens_regex, chunk)
+
+            # Split special tokens, then by pretoken regex
+            for pretoken_chunk in pretoken_chunks:
+                for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
+                    pretoken = pretoken_match.group()
+
+                    pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
+            
+        return pretoken_cnts
+    
+## Usage
+if __name__ == "__main__":
+    mp = get_pretoken_map("tests/fixtures/tinystories_sample.txt", ["<|endoftext|>"])
+    print(mp)
