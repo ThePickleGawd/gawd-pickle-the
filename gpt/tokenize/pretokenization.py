@@ -71,7 +71,7 @@ def get_pretoken_map(file_path, special_tokens) -> dict[tuple[bytes, ...], int]:
             # Split special tokens, then by pretoken regex
             for pretoken_chunk in pretoken_chunks:
                 for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
-                    pretoken = list(tok.encode("utf-8") for tok in pretoken_match.group()) # tuple[byte, ...]
+                    pretoken = tuple(tok.encode("utf-8") for tok in pretoken_match.group()) # tuple[byte, ...]
                     pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
             
         return pretoken_cnts
