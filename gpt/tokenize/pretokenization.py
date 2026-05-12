@@ -50,12 +50,12 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 
-def get_pretoken_map(file_path, special_tokens=[]):
+def get_pretoken_map(file_path, special_tokens) -> dict[tuple[bytes, ...], int]:
     with open(file_path, "rb") as f:
         num_processes = 4
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
-        pretoken_cnts = {}
+        pretoken_cnts: dict[tuple[bytes, ...], int] = {}
 
         # The following is a serial implementation, but you can parallelize this
         # by sending each start/end pair to a set of processes.
@@ -71,8 +71,7 @@ def get_pretoken_map(file_path, special_tokens=[]):
             # Split special tokens, then by pretoken regex
             for pretoken_chunk in pretoken_chunks:
                 for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
-                    pretoken = pretoken_match.group()
-
+                    pretoken = list(tok.encode("utf-8") for tok in pretoken_match.group()) # tuple[byte, ...]
                     pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
             
         return pretoken_cnts
