@@ -1,7 +1,7 @@
 import os
 import io
-from gpt.tokenizer.pretokenization import get_pretokens, get_pretokens_from_path
-from gpt.tokenizer.util import get_merged_pretoken_map, init_vocab
+from gpt.tokenizer.pretokenization import get_pretokens_list, get_pretokens_map
+from gpt.tokenizer.util import get_merged_pretoken_map, get_merged_pretoken_list, init_vocab
 
 
 class Tokenizer:
@@ -11,7 +11,8 @@ class Tokenizer:
         merges: list[tuple[bytes, bytes]],
         special_tokens: list[str] = []
     ):
-        self.vocab = vocab
+        self.int2byte = vocab
+        self.byte2int = {val: key for key, val in vocab.items()}
         self.merges = merges
         self.special_tokens = special_tokens
 
@@ -30,13 +31,14 @@ class Tokenizer:
         buffer = io.BytesIO()
         buffer.write(text.encode("utf-8"))
         
-        pretoken_map = get_pretokens(buffer)
+        pretoken_list = get_pretokens_list(buffer)
 
         # 2. Apply merges in order
         for merge in self.merges:
-            pretoken_map = get_merged_pretoken_map(pretoken_map, merge)
+            pretoken_list = get_merged_pretoken_list(pretoken_list, merge)
 
-        # 3. Output to list
+        # 3. Output to list of ints
+        return [self.byte2int[b] for b in pretoken_list]
         
     
     def decode(self, ids: list[int]) -> str:
@@ -49,8 +51,11 @@ def train_bpe(
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     vocab = init_vocab(special_tokens)
-    pretoken_map = get_pretokens_from_path(input_path, special_tokens)
-    merges: list[tuple[bytes, bytes]] = [] # book keeping (I think for unit test)
+    
+    with open(input_path, "rb") as f:
+        pretoken_map = get_pretokens_map(f, special_tokens)
+
+    merges: list[tuple[bytes, bytes]] = []
 
     # Merge + add to vocab until vocab size is met
     while len(vocab) < vocab_size:

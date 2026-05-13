@@ -49,12 +49,8 @@ def find_chunk_boundaries(
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
-
-def get_pretokens_from_path(file_path: str, special_tokens: list[str] = []):
-    with open(file_path, "rb") as f:
-        return get_pretokens(f, special_tokens)
-
-def get_pretokens(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[bytes, ...], int]:
+# For BPE training, we need dictionary of { pretoken: count }
+def get_pretokens_map(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[bytes, ...], int]:
     num_processes = 4
     boundaries = find_chunk_boundaries(file, num_processes, b"<|endoftext|>")
 
@@ -70,6 +66,7 @@ def get_pretokens(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[
         special_tokens_regex = "|".join(re.escape(token) for token in special_tokens)
         pretoken_chunks = re.split(special_tokens_regex, chunk)
 
+
         # Split special tokens, then by pretoken regex
         for pretoken_chunk in pretoken_chunks:
             for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
@@ -77,8 +74,37 @@ def get_pretokens(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[
                 pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
         
     return pretoken_cnts
+
+
+# For Tokenizer encoding, we need a list of the pretokens
+def get_pretokens_list(file: BinaryIO, special_tokens: list[str] = []) -> list[bytes]:
+    num_processes = 4
+    boundaries = find_chunk_boundaries(file, num_processes, b"<|endoftext|>")
+
+    pretoken_list: list[tuple[bytes, ...]] = []
+
+    # The following is a serial implementation, but you can parallelize this
+    # by sending each start/end pair to a set of processes.
+    for start, end in zip(boundaries[:-1], boundaries[1:]):
+        file.seek(start)
+        chunk = file.read(end - start).decode("utf-8", errors="ignore")
+        # Run pre-tokenization on your chunk and store the counts for each pre-token
+        pretoken_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+        special_tokens_regex = "|".join(re.escape(token) for token in special_tokens)
+        pretoken_chunks = re.split(special_tokens_regex, chunk)
+
+
+        # Split special tokens, then by pretoken regex
+        for pretoken_chunk in pretoken_chunks:
+            for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
+                pretoken = b"".join(tok.encode("utf-8") for tok in pretoken_match.group()) # bytes
+                pretoken_list.append(pretoken)
+        
+    return pretoken_list
     
 ## Usage
 if __name__ == "__main__":
-    mp = get_pretokens_from_path("tests/fixtures/tinystories_sample.txt", ["<|endoftext|>"])
-    print(mp)
+    with open("tests/fixtures/tinystories_sample.txt", "rb") as f:
+        a = get_pretokens_map(f)
+        b = get_pretokens_map(f, ["<|endoftext|>"])
+        print(a, b)
