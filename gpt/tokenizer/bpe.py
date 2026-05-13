@@ -1,5 +1,5 @@
 import os
-from gpt.tokenize.pretokenization import get_pretoken_map
+from gpt.tokenizer.pretokenization import get_pretoken_map
 
 
 # Return special tokens + all 256 byte encodings

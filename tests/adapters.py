@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
-from gpt.tokenize.bpe import train_bpe
+from gpt.tokenizer.bpe import train_bpe
 
 
 def run_linear(
