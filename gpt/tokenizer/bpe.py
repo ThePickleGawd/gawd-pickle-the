@@ -31,19 +31,21 @@ class Tokenizer:
         buffer = io.BytesIO()
         buffer.write(text.encode("utf-8"))
         
-        pretoken_list = get_pretokens_list(buffer)
+        pretoken_list = get_pretokens_list(buffer, self.special_tokens)
 
         # 2. Apply merges in order
         for merge in self.merges:
             pretoken_list = get_merged_pretoken_list(pretoken_list, merge)
 
-        # 3. Output to list of ints
-        return [self.byte2int[b] for b in pretoken_list]
+        # 3. Flatten list[tuple[bytes, ...]] to list[int]
+        return [self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple]
         
     
     def decode(self, ids: list[int]) -> str:
         # Convert ids to bytes
         text_bytes = b"".join([self.int2byte[id] for id in ids])
+
+        # print([self.int2byte[id].decode("utf-8") for id in ids])
 
         return text_bytes.decode("utf-8", errors="replace")
 
@@ -81,9 +83,11 @@ def train_bpe(
     return vocab, merges
 
 if __name__ == "__main__":
-    vocab, merges = train_bpe("tests/fixtures/tinystories_sample.txt", 1024, ["<|endoftext|>"])
+    special_tokens = ["<|endoftext|>"]
+    vocab, merges = train_bpe("tests/fixtures/tinystories_sample.txt", 1024, special_tokens)
     
-    tokenizer = Tokenizer(vocab, merges)
+    tokenizer = Tokenizer(vocab, merges, special_tokens)
+    # print(vocab, merges)
 
     query = "Hello, this is some text that could be; tokenized?? <|endoftext|> And this is a new doc... lol!"
     print(query)

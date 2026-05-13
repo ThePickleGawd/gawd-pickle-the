@@ -24,7 +24,7 @@ def get_merged_pretoken_map(pretoken_map: dict[tuple[bytes, ...], int], merge_pa
     return updated_map
 
 
-def get_merged_pretoken_list(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]):
+def get_merged_pretoken_list(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]) -> list[tuple[bytes, ...]]:
     updated_list = []
 
     i = 0

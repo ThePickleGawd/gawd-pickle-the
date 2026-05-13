@@ -50,6 +50,7 @@ def find_chunk_boundaries(
     return sorted(set(chunk_boundaries))
 
 # For BPE training, we need dictionary of { pretoken: count }
+# We will filter out all special tokens, since we don't need stats on this
 def get_pretokens_map(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[bytes, ...], int]:
     num_processes = 4
     boundaries = find_chunk_boundaries(file, num_processes, b"<|endoftext|>")
@@ -63,21 +64,28 @@ def get_pretokens_map(file: BinaryIO, special_tokens: list[str] = []) -> dict[tu
         chunk = file.read(end - start).decode("utf-8", errors="ignore")
         # Run pre-tokenization on your chunk and store the counts for each pre-token
         pretoken_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-        special_tokens_regex = "|".join(re.escape(token) for token in special_tokens)
-        pretoken_chunks = re.split(special_tokens_regex, chunk)
 
+        if special_tokens:
+            # Regex with largest first to prevent any prefix special tokens firing first
+            special_tokens_regex = "|".join(re.escape(token) for token in sorted(special_tokens, key=lambda x: len(x), reverse=True))
+            pretoken_chunks = re.split(special_tokens_regex, chunk)
+        else:
+            pretoken_chunks = [chunk]
 
         # Split special tokens, then by pretoken regex
         for pretoken_chunk in pretoken_chunks:
             for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
-                pretoken = tuple(tok.encode("utf-8") for tok in pretoken_match.group()) # tuple[byte, ...]
+                pretoken = tuple(bytes([b]) 
+                                 for tok in pretoken_match.group()
+                                 for b in tok.encode("utf-8") ) # tuple[byte, ...]
                 pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
         
     return pretoken_cnts
 
 
-# For Tokenizer encoding, we need a list of the pretokens
-def get_pretokens_list(file: BinaryIO, special_tokens: list[str] = []) -> list[bytes]:
+# For Tokenizer encoding, we need a list of the pretokens -- each is a tuple
+# [(b"h", b"e", b"l", b"l", b"o"), (b"t", b"h", b"e", b"r", b"e"), ("<|endoftext|>",)]
+def get_pretokens_list(file: BinaryIO, special_tokens: list[str] = []) -> list[tuple[bytes, ...]]:
     num_processes = 4
     boundaries = find_chunk_boundaries(file, num_processes, b"<|endoftext|>")
 
@@ -88,17 +96,41 @@ def get_pretokens_list(file: BinaryIO, special_tokens: list[str] = []) -> list[b
     for start, end in zip(boundaries[:-1], boundaries[1:]):
         file.seek(start)
         chunk = file.read(end - start).decode("utf-8", errors="ignore")
-        # Run pre-tokenization on your chunk and store the counts for each pre-token
         pretoken_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-        special_tokens_regex = "|".join(re.escape(token) for token in special_tokens)
-        pretoken_chunks = re.split(special_tokens_regex, chunk)
 
+        # 1. Build initial pass or pretoken list, seperating special tokens: ["some text", "<|endoftext|>", "long corpus here"]
+        local_pretoken_list_str: list[str] = []
+        if special_tokens:
+            special_tokens_regex = "|".join(re.escape(token) for token in sorted(special_tokens, key=lambda x: len(x), reverse=True))
+            idx = 0
+            for special_token_match in re.finditer(special_tokens_regex, chunk):
+                # Append non special tokens up to this match
+                prev_tokens = chunk[idx:special_token_match.start()]
+                if prev_tokens:
+                    local_pretoken_list_str.append(prev_tokens)
 
-        # Split special tokens, then by pretoken regex
-        for pretoken_chunk in pretoken_chunks:
+                # Append the special token
+                local_pretoken_list_str.append(special_token_match.group())
+                idx = special_token_match.end()
+
+            if idx != len(chunk):
+                local_pretoken_list_str.append(chunk[idx:])
+        else:
+            local_pretoken_list_str = [chunk]
+        
+        # 2. Within each item which is not a special token, apply the pretokenization regex
+        local_pretoken_list_bytes: list[tuple[bytes, ...]] = []
+        for pretoken_chunk in local_pretoken_list_str:
+            if pretoken_chunk in special_tokens:
+                local_pretoken_list_bytes.append((pretoken_chunk.encode("utf-8"),))
+                continue
+
             for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
-                pretoken = b"".join(tok.encode("utf-8") for tok in pretoken_match.group()) # bytes
-                pretoken_list.append(pretoken)
+                encoded = pretoken_match.group().encode("utf-8") # bytes: b"abc"
+                local_pretoken_list_bytes.append(tuple(bytes([b]) for b in encoded))
+
+        # In future, we will need to parallelize this smartly (how to order)
+        pretoken_list.extend(local_pretoken_list_bytes)
         
     return pretoken_list
     
