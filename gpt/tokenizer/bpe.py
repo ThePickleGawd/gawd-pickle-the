@@ -42,7 +42,10 @@ class Tokenizer:
         
     
     def decode(self, ids: list[int]) -> str:
-        pass
+        # Convert ids to bytes
+        text_bytes = b"".join([self.int2byte[id] for id in ids])
+
+        return text_bytes.decode("utf-8", errors="replace")
 
 def train_bpe(
     input_path: str | os.PathLike,
@@ -81,5 +84,13 @@ if __name__ == "__main__":
     vocab, merges = train_bpe("tests/fixtures/tinystories_sample.txt", 1024, ["<|endoftext|>"])
     
     tokenizer = Tokenizer(vocab, merges)
-    ids = tokenizer.encode("Hello, this is some text that could be; tokenized?? <|endoftext|> And this is a new doc... lol!")
+
+    query = "Hello, this is some text that could be; tokenized?? <|endoftext|> And this is a new doc... lol!"
+    print(query)
+    ids = tokenizer.encode(query)
     print(ids)
+    output = tokenizer.decode(ids)
+    print(output)
+
+    assert query == output
+    print("\n\nMatches :)")
