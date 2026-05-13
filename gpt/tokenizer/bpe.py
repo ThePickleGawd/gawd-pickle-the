@@ -2,6 +2,30 @@ import os
 from gpt.tokenizer.pretokenization import get_pretoken_map
 
 
+class Tokenizer:
+    def __init__(
+        self,
+        vocab: dict[int, bytes],
+        merges: list[tuple[bytes, bytes]],
+        special_tokens: list[str] | None = None
+    ):
+        pass
+
+    def from_files(
+        cls,
+        vocab_filepath: str,
+        merges_filepath: str,
+        special_tokens: list[str] | None = None
+    ):
+        pass
+
+    def encode(self, text: str) -> list[int]:
+        pass
+    
+    def decode(self, ids: list[int]) -> str:
+        pass
+
+
 # Return special tokens + all 256 byte encodings
 def init_vocab(special_tokens) -> dict[int, bytes]:
     vocab_list = [bytes([i]) for i in range(256)] + [token.encode("utf-8") for token in special_tokens] 
