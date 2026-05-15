@@ -1,5 +1,8 @@
+from collections.abc import Iterable
 import os
 import io
+from typing import Iterator
+
 from gpt.tokenizer.pretokenization import get_pretokens_list_encode, get_pretokens_map_training
 from gpt.tokenizer.util import get_merged_pretoken_map_training, get_merged_pretoken_list_encode, init_vocab
 
@@ -39,6 +42,16 @@ class Tokenizer:
 
         # 3. Flatten list[tuple[bytes, ...]] to list[int]
         return [self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple]
+
+    
+    def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+        # Need to ensure we don't cross boundary
+        # We can mantain a working str, then process as much as possible
+        # If we get to a possible chunk boundary, just leave it in the queue
+        
+         
+
+        pass
         
     
     def decode(self, ids: list[int]) -> str:

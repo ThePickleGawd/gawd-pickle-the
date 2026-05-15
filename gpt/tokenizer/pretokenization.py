@@ -111,8 +111,6 @@ def get_pretokens_list_encode(file: BinaryIO, special_tokens: list[str] = []) ->
     else:
         pretoken_list_str = [chunk]
     
-    print(chunk)
-    
     # 2. Within each item which is not a special token, apply the pretokenization regex
     pretoken_list_bytes: list[tuple[bytes, ...]] = []
     for pretoken_chunk in pretoken_list_str:
