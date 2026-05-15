@@ -1,7 +1,7 @@
 import os
 import io
-from gpt.tokenizer.pretokenization import get_pretokens_list, get_pretokens_map
-from gpt.tokenizer.util import get_merged_pretoken_map, get_merged_pretoken_list, init_vocab
+from gpt.tokenizer.pretokenization import get_pretokens_list_encode, get_pretokens_map_training
+from gpt.tokenizer.util import get_merged_pretoken_map_training, get_merged_pretoken_list_encode, init_vocab
 
 
 class Tokenizer:
@@ -31,11 +31,11 @@ class Tokenizer:
         buffer = io.BytesIO()
         buffer.write(text.encode("utf-8"))
         
-        pretoken_list = get_pretokens_list(buffer, self.special_tokens)
+        pretoken_list = get_pretokens_list_encode(buffer, self.special_tokens)
 
         # 2. Apply merges in order
         for merge in self.merges:
-            pretoken_list = get_merged_pretoken_list(pretoken_list, merge)
+            pretoken_list = get_merged_pretoken_list_encode(pretoken_list, merge)
 
         # 3. Flatten list[tuple[bytes, ...]] to list[int]
         return [self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple]
@@ -58,7 +58,7 @@ def train_bpe(
     vocab = init_vocab(special_tokens)
     
     with open(input_path, "rb") as f:
-        pretoken_map = get_pretokens_map(f, special_tokens)
+        pretoken_map = get_pretokens_map_training(f, special_tokens)
 
     merges: list[tuple[bytes, bytes]] = []
 
@@ -77,7 +77,7 @@ def train_bpe(
         vocab[len(vocab)] = most_freq_pair[0] + most_freq_pair[1]
 
         # Merge all instances in the pretokens
-        pretoken_map = get_merged_pretoken_map(pretoken_map, most_freq_pair)
+        pretoken_map = get_merged_pretoken_map_training(pretoken_map, most_freq_pair)
         merges.append(most_freq_pair)
     
     return vocab, merges

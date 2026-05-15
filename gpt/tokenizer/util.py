@@ -4,7 +4,7 @@ def init_vocab(special_tokens) -> dict[int, bytes]:
     return {i: vocab_list[i] for i in range(len(vocab_list))}
 
 
-def get_merged_pretoken_map(pretoken_map: dict[tuple[bytes, ...], int], merge_pair: tuple[bytes, bytes]):
+def get_merged_pretoken_map_training(pretoken_map: dict[tuple[bytes, ...], int], merge_pair: tuple[bytes, bytes]):
     updated_map = {}
 
     for pretoken, cnt in pretoken_map.items():
@@ -24,7 +24,7 @@ def get_merged_pretoken_map(pretoken_map: dict[tuple[bytes, ...], int], merge_pa
     return updated_map
 
 
-def get_merged_pretoken_list(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]) -> list[tuple[bytes, ...]]:
+def get_merged_pretoken_list_encode(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]) -> list[tuple[bytes, ...]]:
     updated_list = []
 
     i = 0
