@@ -25,15 +25,18 @@ def get_merged_pretoken_map_training(pretoken_map: dict[tuple[bytes, ...], int],
 
 
 def get_merged_pretoken_list_encode(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]) -> list[tuple[bytes, ...]]:
-    updated_list = []
+    updated_list: list[tuple[bytes]] = []
 
-    i = 0
-    while i < len(pretoken_list):
-        if i + 1 < len(pretoken_list) and (pretoken_list[i], pretoken_list[i+1]) == merge_pair:
-            updated_list.append(b"".join(merge_pair))
-            i += 2
-        else:
-            updated_list.append(pretoken_list[i])
-            i += 1
+    for pretoken_tuple in pretoken_list:
+        i = 0
+        updated_pretoken: list[bytes] = []
+        while i < len(pretoken_tuple):
+            if i + 1 < len(pretoken_tuple) and (pretoken_tuple[i], pretoken_tuple[i+1]) == merge_pair:
+                updated_pretoken.append(b"".join(merge_pair))
+                i += 2
+            else:
+                updated_pretoken.append(pretoken_tuple[i])
+                i += 1
+        updated_list.append(tuple(updated_pretoken))
 
     return updated_list
