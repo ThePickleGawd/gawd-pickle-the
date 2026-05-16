@@ -1,7 +1,7 @@
 import os
 from typing import BinaryIO
 import regex as re
-
+from gpt.tokenizer.util import PRETOKEN_REGEX
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -63,7 +63,6 @@ def get_pretokens_map_training(file: BinaryIO, special_tokens: list[str] = []) -
         file.seek(start)
         chunk = file.read(end - start).decode("utf-8", errors="ignore")
         # Run pre-tokenization on your chunk and store the counts for each pre-token
-        pretoken_regex = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
         if special_tokens:
             # Regex with largest first to prevent any prefix special tokens firing first
@@ -74,7 +73,7 @@ def get_pretokens_map_training(file: BinaryIO, special_tokens: list[str] = []) -
 
         # Split special tokens, then by pretoken regex
         for pretoken_chunk in pretoken_chunks:
-            for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
+            for pretoken_match in re.finditer(PRETOKEN_REGEX, pretoken_chunk):
                 pretoken = tuple(bytes([b]) 
                                  for tok in pretoken_match.group()
                                  for b in tok.encode("utf-8") ) # tuple[byte, ...]

@@ -1,10 +1,11 @@
 from collections.abc import Iterable
 import os
 import io
+import regex as re
 from typing import Iterator
 
 from gpt.tokenizer.pretokenization import get_pretokens_list_encode, get_pretokens_map_training
-from gpt.tokenizer.util import get_merged_pretoken_map_training, get_merged_pretoken_list_encode, init_vocab
+from gpt.tokenizer.util import get_merged_pretoken_map_training, get_merged_pretoken_list_encode, init_vocab, PRETOKEN_REGEX
 
 
 class Tokenizer:
@@ -45,13 +46,35 @@ class Tokenizer:
 
     
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        # Need to ensure we don't cross boundary
-        # We can mantain a working str, then process as much as possible
-        # If we get to a possible chunk boundary, just leave it in the queue
-        
-         
+        buffer = ""
 
-        pass
+        # Don't process a possible special token
+        max_special_token_len = max(len(x) for x in  self.special_tokens) if self.special_tokens else 0
+
+        for char in iterable:
+            buffer += char
+
+            if len(buffer) < max_special_token_len:
+                continue
+
+            # Don't consider end that could create a special token
+            cutoff = max(0, len(buffer) - max_special_token_len)
+            safe_text = buffer[:cutoff]
+            remainder = buffer[cutoff:]
+
+            # Split into pretokens, don't process the last one; it could be a special token
+            matches = list(re.finditer(PRETOKEN_REGEX, safe_text))
+            if not matches:
+                continue
+            
+
+            safe_end = matches[-1].start()
+            yield from self.encode(safe_text[:safe_end])
+
+            buffer = safe_text[safe_end:] + remainder
+
+
+        yield from self.encode(buffer)
         
     
     def decode(self, ids: list[int]) -> str:
@@ -111,3 +134,12 @@ if __name__ == "__main__":
 
     assert query == output
     print("\n\nMatches :)")
+
+    print("Encode iterable")
+    ids_iterable = []
+    for id in tokenizer.encode_iterable(query):
+        # print(f"{id}")
+        ids_iterable.append(id)
+    print(tokenizer.decode(ids_iterable))
+
+    

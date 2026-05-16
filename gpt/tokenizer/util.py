@@ -1,3 +1,7 @@
+
+PRETOKEN_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+
+
 # Return special tokens + all 256 byte encodings
 def init_vocab(special_tokens) -> dict[int, bytes]:
     vocab_list = [bytes([i]) for i in range(256)] + [token.encode("utf-8") for token in special_tokens] 
