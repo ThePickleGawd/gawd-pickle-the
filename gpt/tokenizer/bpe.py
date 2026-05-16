@@ -20,12 +20,17 @@ class Tokenizer:
         self.merges = merges
         self.special_tokens = special_tokens
 
+    @classmethod
     def from_files(
         cls,
         vocab_filepath: str,
         merges_filepath: str,
         special_tokens: list[str] = []
     ):
+        pass
+
+    def export(vocab_filepath: str, merges_filepath: str):
+
         pass
 
     def encode(self, text: str) -> list[int]:
@@ -51,8 +56,8 @@ class Tokenizer:
         # Don't process a possible special token
         max_special_token_len = max(len(x) for x in  self.special_tokens) if self.special_tokens else 0
 
-        for char in iterable:
-            buffer += char
+        for chunk in iterable:
+            buffer += chunk
 
             if len(buffer) < max_special_token_len:
                 continue
@@ -63,18 +68,21 @@ class Tokenizer:
             remainder = buffer[cutoff:]
 
             # Split into pretokens, don't process the last one; it could be a special token
-            matches = list(re.finditer(PRETOKEN_REGEX, safe_text))
-            if not matches:
-                continue
-            
+            last = None
+            for match in re.finditer(PRETOKEN_REGEX, safe_text):
+                last = match
 
-            safe_end = matches[-1].start()
+            if not last:
+                continue
+
+            safe_end = last.start()
             yield from self.encode(safe_text[:safe_end])
 
             buffer = safe_text[safe_end:] + remainder
 
 
-        yield from self.encode(buffer)
+        if buffer:
+            yield from self.encode(buffer)
         
     
     def decode(self, ids: list[int]) -> str:
