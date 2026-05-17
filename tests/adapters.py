@@ -11,6 +11,7 @@ from torch import Tensor
 
 # My implementation
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
+from gpt.model import Linear
 
 
 def run_linear(
@@ -31,8 +32,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+    linear = Linear(d_in, d_out)
+    linear.W = weights
 
-    raise NotImplementedError
+    return linear(in_features)
 
 
 def run_embedding(
@@ -455,7 +458,9 @@ def run_cross_entropy(
     raise NotImplementedError
 
 
-def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
+def run_gradient_clipping(
+    parameters: Iterable[torch.nn.Parameter], max_l2_norm: float
+) -> None:
     """Given a set of parameters, clip their combined gradients to have l2 norm at most max_l2_norm.
 
     Args:
