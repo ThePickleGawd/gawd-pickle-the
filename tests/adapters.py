@@ -6,12 +6,13 @@ from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
+import torch.nn as nn
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
-from gpt.model import Linear
+from gpt.model import Linear, Embedding
 
 
 def run_linear(
@@ -33,7 +34,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     linear = Linear(d_in, d_out)
-    linear.W = weights
+    linear.weight = nn.Parameter(weights)
 
     return linear(in_features)
 
@@ -57,7 +58,10 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    embedding = Embedding(vocab_size, d_model)
+    embedding.weight = nn.Parameter(weights)
+
+    return embedding(token_ids)
 
 
 def run_swiglu(
