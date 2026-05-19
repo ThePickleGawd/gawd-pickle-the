@@ -12,7 +12,7 @@ from torch import Tensor
 
 # My implementation
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
-from gpt.model import Linear, Embedding, RMSNorm
+from gpt.model import Linear, Embedding, RMSNorm, SiLU, SwiGLU
 
 
 def run_linear(
@@ -90,10 +90,12 @@ def run_swiglu(
     # If your state dict keys match, you can use `load_state_dict()`
     # swiglu.load_state_dict(weights)
     # You can also manually assign the weights
-    # swiglu.w1.weight.data = w1_weight
-    # swiglu.w2.weight.data = w2_weight
-    # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+
+    swiglu = SwiGLU(d_model, d_ff)
+    swiglu.w1 = nn.Parameter(w1_weight)
+    swiglu.w2 = nn.Parameter(w2_weight)
+    swiglu.w3 = nn.Parameter(w3_weight)
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
@@ -406,7 +408,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    silu = SiLU()
+    return silu(in_features)
 
 
 def run_get_batch(
