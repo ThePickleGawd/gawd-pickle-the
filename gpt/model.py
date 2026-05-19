@@ -25,11 +25,6 @@ class Linear(nn.Module):
         return x @ self.weight.T
 
 
-"""
-def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None) Construct anembedding module. This function should accept the following parameters:num_embeddings: int Size of the vocabularyembedding_dim: int Dimension of the embedding vectors, i.e., d_modeldevice: torch.device | None = None Device to store the parameters ondtype: torch.dtype | None = None Data type of the parametersdef forward(self, token_ids: torch.Tensor) -> torch.Tensor Lookup the embedding vectorsfor the given token IDs.
-"""
-
-
 class Embedding(nn.Module):
     def __init__(
         self,
@@ -49,3 +44,36 @@ class Embedding(nn.Module):
         # token_ids: (batch_size, sequence_length)
         # output: (batch_size, sequence_length, embedding_dim)
         return self.weight[token_ids]
+
+
+class RMSNorm(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        eps: float = 1e-5,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.gain = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+        self.eps = eps
+
+        self.d_model = d_model
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (batch_size, sequence_length, d_model)
+        # output: (batch_size, sequence_length, d_model)
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+
+        # Apply RMS(a)
+        x2 = torch.square(x)
+        x2_sum = reduce(x2, "b s d -> b s 1", "sum")
+        rms = torch.sqrt(
+            1 / self.d_model * x2_sum + self.eps
+        )  # (batch_size, sequence_length)
+
+        # Return RMSNorm(a)
+        result = x / rms * self.gain
+        return result.to(in_dtype)

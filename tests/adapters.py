@@ -12,7 +12,7 @@ from torch import Tensor
 
 # My implementation
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
-from gpt.model import Linear, Embedding
+from gpt.model import Linear, Embedding, RMSNorm
 
 
 def run_linear(
@@ -388,7 +388,11 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+
+    rmsnorm = RMSNorm(d_model, eps)
+    rmsnorm.gain = nn.Parameter(weights)
+
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
