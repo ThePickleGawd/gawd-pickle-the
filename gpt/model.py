@@ -41,8 +41,8 @@ class Embedding(nn.Module):
         nn.init.trunc_normal_(self.weight, mean=0, std=1)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
-        # token_ids: (batch_size, sequence_length)
-        # output: (batch_size, sequence_length, embedding_dim)
+        # token_ids: (batch_size, seq_len)
+        # output: (batch_size, seq_len, embedding_dim)
         return self.weight[token_ids]
 
 
@@ -62,17 +62,15 @@ class RMSNorm(nn.Module):
         self.d_model = d_model
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch_size, sequence_length, d_model)
-        # output: (batch_size, sequence_length, d_model)
+        # x: (batch_size, seq_len, d_model)
+        # output: (batch_size, seq_len, d_model)
         in_dtype = x.dtype
         x = x.to(torch.float32)
 
         # Apply RMS(a)
         x2 = torch.square(x)
         x2_sum = reduce(x2, "b s d -> b s 1", "sum")
-        rms = torch.sqrt(
-            1 / self.d_model * x2_sum + self.eps
-        )  # (batch_size, sequence_length)
+        rms = torch.sqrt(1 / self.d_model * x2_sum + self.eps)  # (batch_size, seq_len)
 
         # Return RMSNorm(a)
         result = x / rms * self.gain
@@ -104,8 +102,52 @@ class SwiGLU(nn.Module):
         self.silu = SiLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch_size, sequence_length, d_model)
-        # output: (batch_size, sequence_length, d_model)
+        # x: (batch_size, seq_len, d_model)
+        # output: (batch_size, seq_len, d_model)
 
         # SwiGLU = W_2 * (SiLU(W_1 * x) * W_3 * x))
         return (self.silu(x @ self.w1.T) * (x @ self.w3.T)) @ self.w2.T
+
+
+class RotaryPositionalEmbedding(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None) -> None:
+        super().__init__()
+
+        assert d_k % 2 == 0, "RoPE d_k must be even"
+        self.d_k = d_k
+
+        tok_pos = torch.arange(max_seq_len, dtype=torch.float32)
+        pair_pos = torch.arange(d_k // 2, dtype=torch.float32)
+
+        # Allows broadcasting to assign every (i,j) pair to rope_angles
+        tok_pos = rearrange(tok_pos, "i -> i 1")
+        pair_pos = rearrange(pair_pos, "j -> 1 j")
+
+        rope_angles = tok_pos / (theta ** (2 * pair_pos / d_k))
+        rope_cos = torch.cos(rope_angles)  # (max_seq_len, d_k//2)
+        rope_sin = torch.sin(rope_angles)  # (max_seq_len, d_k//2)
+
+        self.register_buffer("rope_cos", rope_cos, persistent=False)
+        self.register_buffer("rope_sin", rope_sin, persistent=False)
+
+    def forward(self, x: torch.Tensor, tok_pos: torch.Tensor) -> torch.Tensor:
+        # x: (batch_size, seq_len, d_k)
+        # tok_pos: (batch_size, seq_len)
+        # output: (batch_size, seq_len, d_k)
+
+        # Split x into even and odd pairs
+        # (..., seq_len, d_k / 2)
+        x_even = x[..., 0::2]
+        x_odd = x[..., 1::2]
+
+        # Apply the precomputed rotation 2x2 matrix
+        cos = self.rope_cos[tok_pos]
+        sin = self.rope_sin[tok_pos]
+        new_even = cos * x_even - sin * x_odd
+        new_odd = sin * x_even + cos * x_odd
+
+        out = torch.empty_like(x)
+        out[..., 0::2] = new_even
+        out[..., 1::2] = new_odd
+
+        return out
