@@ -41,8 +41,11 @@ class Embedding(nn.Module):
         nn.init.trunc_normal_(self.weight, mean=0, std=1)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
-        # token_ids: (batch_size, seq_len)
-        # output: (batch_size, seq_len, embedding_dim)
+        """
+        token_ids: (batch_size, seq_len)
+        output: (batch_size, seq_len, embedding_dim)
+        """
+
         return self.weight[token_ids]
 
 
@@ -62,8 +65,11 @@ class RMSNorm(nn.Module):
         self.d_model = d_model
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch_size, seq_len, d_model)
-        # output: (batch_size, seq_len, d_model)
+        """
+        x: (batch_size, seq_len, d_model)
+        output: (batch_size, seq_len, d_model)
+        """
+
         in_dtype = x.dtype
         x = x.to(torch.float32)
 
@@ -102,8 +108,10 @@ class SwiGLU(nn.Module):
         self.silu = SiLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch_size, seq_len, d_model)
-        # output: (batch_size, seq_len, d_model)
+        """
+        x: (batch_size, seq_len, d_model)
+        output: (batch_size, seq_len, d_model)
+        """
 
         # SwiGLU = W_2 * (SiLU(W_1 * x) * W_3 * x))
         return (self.silu(x @ self.w1.T) * (x @ self.w3.T)) @ self.w2.T
@@ -131,9 +139,11 @@ class RotaryPositionalEmbedding(nn.Module):
         self.register_buffer("rope_sin", rope_sin, persistent=False)
 
     def forward(self, x: torch.Tensor, tok_pos: torch.Tensor) -> torch.Tensor:
-        # x: (batch_size, seq_len, d_k)
-        # tok_pos: (batch_size, seq_len)
-        # output: (batch_size, seq_len, d_k)
+        """
+        x: (batch_size, seq_len, d_k)
+        tok_pos: (batch_size, seq_len)
+        output: (batch_size, seq_len, d_k)
+        """
 
         # Split x into even and odd pairs
         # (..., seq_len, d_k / 2)
@@ -154,10 +164,23 @@ class RotaryPositionalEmbedding(nn.Module):
 
 
 def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
-    # x: (batch_size, seq_len, d_k)
+    """x: (batch_size, seq_len, d_k)"""
 
     x_max, _ = torch.max(x, dim=dim, keepdim=True)  # (batch_size, seq_len, 1)
     x -= x_max  # (batch_size, seq_len, d_k)
 
     x_exp = torch.exp(x)
     return x_exp / torch.sum(x_exp, dim=dim, keepdim=True)
+
+
+def scaled_dot_product_attention(
+    Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None
+):
+    """
+    Q: (batch_size, ..., seq_len, d_k)
+    K: (batch_size, ..., seq_len*, d_v)
+    V: (batch_size, ..., seq_len*, d_v)
+    mask: (seq_len, seq_len)
+    """
+
+    pass
