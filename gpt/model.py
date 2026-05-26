@@ -178,9 +178,21 @@ def scaled_dot_product_attention(
 ):
     """
     Q: (batch_size, ..., seq_len, d_k)
-    K: (batch_size, ..., seq_len*, d_v)
+    K: (batch_size, ..., seq_len*, d_k)
     V: (batch_size, ..., seq_len*, d_v)
-    mask: (seq_len, seq_len)
+    mask: (batch_size, seq_len, seq_len*)
     """
 
-    pass
+    d_k = Q.size(-1)
+    K_t = rearrange(K, "... m d_k -> ... d_k m")
+    scores = (Q @ K_t) / math.sqrt(d_k)  # (..., seq_len, seq_len*)
+
+    if mask is not None:
+        assert mask.dtype == torch.bool, "Only boolean masks are supported right now"
+
+        attn_bias = torch.zeros_like(mask, dtype=Q.dtype)
+        attn_bias.masked_fill_(~mask, float("-inf"))
+        scores += attn_bias
+
+    attn = softmax(scores, dim=-1)
+    return attn @ V
