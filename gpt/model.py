@@ -124,8 +124,8 @@ class RotaryPositionalEmbedding(nn.Module):
         assert d_k % 2 == 0, "RoPE d_k must be even"
         self.d_k = d_k
 
-        tok_pos = torch.arange(max_seq_len, dtype=torch.float32)
-        pair_pos = torch.arange(d_k // 2, dtype=torch.float32)
+        tok_pos = torch.arange(max_seq_len, dtype=torch.float32, device=device)
+        pair_pos = torch.arange(d_k // 2, dtype=torch.float32, device=device)
 
         # Allows broadcasting to assign every (i,j) pair to rope_angles
         tok_pos = rearrange(tok_pos, "i -> i 1")
@@ -142,6 +142,7 @@ class RotaryPositionalEmbedding(nn.Module):
         """
         x: (batch_size, seq_len, d_k)
         tok_pos: (batch_size, seq_len)
+
         output: (batch_size, seq_len, d_k)
         """
 
@@ -174,25 +175,87 @@ def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
 
 
 def scaled_dot_product_attention(
-    Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, mask: torch.Tensor = None
+    Q: torch.Tensor,
+    K: torch.Tensor,
+    V: torch.Tensor,
+    mask: torch.Tensor = None,
+    is_causal: bool = False,
 ):
     """
     Q: (batch_size, ..., seq_len, d_k)
     K: (batch_size, ..., seq_len*, d_k)
     V: (batch_size, ..., seq_len*, d_v)
     mask: (batch_size, seq_len, seq_len*)
+
+    output: (batch_size, ..., seq_len, d_v)
     """
 
     d_k = Q.size(-1)
     K_t = rearrange(K, "... m d_k -> ... d_k m")
     scores = (Q @ K_t) / math.sqrt(d_k)  # (..., seq_len, seq_len*)
 
+    if is_causal:
+        assert mask is None, "Casaul attention doesn't support masks"
+
+        seq_len = Q.size(-2)
+        casual_mask = torch.ones(
+            seq_len, seq_len, dtype=torch.bool, device=Q.device
+        ).tril()
+        attn_bias = torch.zeros(seq_len, seq_len, dtype=Q.dtype, device=Q.device)
+        attn_bias.masked_fill_(~casual_mask, float("-inf"))
+
+        scores += attn_bias
+
     if mask is not None:
         assert mask.dtype == torch.bool, "Only boolean masks are supported right now"
 
-        attn_bias = torch.zeros_like(mask, dtype=Q.dtype)
+        attn_bias = torch.zeros_like(mask, dtype=Q.dtype, device=Q.device)
         attn_bias.masked_fill_(~mask, float("-inf"))
         scores += attn_bias
 
     attn = softmax(scores, dim=-1)
     return attn @ V
+
+
+class MultiheadAttention(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.num_heads = num_heads
+
+        # Following Attention is All You Need
+        d_k = d_v = d_model // num_heads
+
+        self.q_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(num_heads * d_v, d_model, device=device, dtype=dtype)
+        self.o_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (batch_size, seq_len, d_model)
+        """
+        Q = self.q_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+        K = self.k_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+        V = self.v_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+
+        K = rearrange(
+            K, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
+        )
+        Q = rearrange(
+            Q, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
+        )
+        V = rearrange(
+            V, "... seq (heads d_v) -> ... heads seq d_v", heads=self.num_heads
+        )
+
+        attn_output = scaled_dot_product_attention(Q, K, V, is_causal=True)
+        attn_output = rearrange(attn_output, "... heads seq d_v -> ... seq (heads d_v)")
+
+        return self.o_proj(attn_output)

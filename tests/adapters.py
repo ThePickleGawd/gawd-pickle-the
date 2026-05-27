@@ -15,6 +15,7 @@ from gpt.tokenizer.bpe import train_bpe, Tokenizer
 from gpt.model import (
     Linear,
     Embedding,
+    MultiheadAttention,
     RMSNorm,
     RotaryPositionalEmbedding,
     SiLU,
@@ -159,7 +160,13 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mha = MultiheadAttention(d_model, num_heads)
+    mha.q_proj.weight = nn.Parameter(q_proj_weight)
+    mha.k_proj.weight = nn.Parameter(k_proj_weight)
+    mha.v_proj.weight = nn.Parameter(v_proj_weight)
+    mha.o_proj.weight = nn.Parameter(o_proj_weight)
+
+    return mha(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -199,7 +206,13 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mha = MultiheadAttention(d_model, num_heads)
+    mha.q_proj.weight = nn.Parameter(q_proj_weight)
+    mha.k_proj.weight = nn.Parameter(k_proj_weight)
+    mha.v_proj.weight = nn.Parameter(v_proj_weight)
+    mha.o_proj.weight = nn.Parameter(o_proj_weight)
+
+    return mha(in_features)
 
 
 def run_rope(
