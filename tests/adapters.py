@@ -311,6 +311,11 @@ def run_transformer_block(
         running the Transformer block on the input features while using RoPE.
     """
     transformer = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
+    transformer.load_state_dict(weights)
+    token_positions = torch.arange(
+        in_features.size(-2), dtype=torch.int, device=in_features.device
+    ).unsqueeze(0)
+    return transformer(in_features, token_positions)
 
 
 def run_transformer_lm(

@@ -101,9 +101,9 @@ class SwiGLU(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.w1 = Linear(d_ff, d_model, device=device, dtype=dtype)
-        self.w2 = Linear(d_model, d_ff, device=device, dtype=dtype)
-        self.w3 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
 
         self.silu = SiLU()
 
