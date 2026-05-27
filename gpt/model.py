@@ -344,3 +344,46 @@ class TransformerBlock(nn.Module):
 
         x = x + self.attn(self.ln1(x), token_positions)
         return x + self.ffn(self.ln2(x))
+
+
+class TransformerLM(nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        context_length: int,
+        d_model: int,
+        num_layers: int,
+        num_heads: int,
+        d_ff: int,
+        theta: float,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
+        self.layers = nn.ModuleList(
+            TransformerBlock(
+                d_model, num_heads, d_ff, context_length, theta, device, dtype
+            )
+            for _ in range(num_layers)
+        )
+        self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+        self.lm_head = Linear(d_model, vocab_size)
+
+    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
+        """
+        token_ids: (batch_size, seq_len)
+        """
+
+        seq_len = token_ids.size(-1)
+        token_positions = torch.arange(
+            seq_len, device=token_ids.device, dtype=torch.int
+        ).unsqueeze(0)
+
+        x = self.token_embeddings(token_ids)
+        for transformer_block in self.layers:
+            x = transformer_block(x, token_positions)
+
+        x = self.ln_final(x)
+        return self.lm_head(x)
