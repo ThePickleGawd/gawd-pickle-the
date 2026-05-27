@@ -245,11 +245,11 @@ class MultiheadAttention(nn.Module):
         K = self.k_proj(x)  # (batch_size, seq_len, num_heads * d_k)
         V = self.v_proj(x)  # (batch_size, seq_len, num_heads * d_k)
 
-        K = rearrange(
-            K, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
-        )
         Q = rearrange(
             Q, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
+        )
+        K = rearrange(
+            K, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
         )
         V = rearrange(
             V, "... seq (heads d_v) -> ... heads seq d_v", heads=self.num_heads
@@ -259,3 +259,80 @@ class MultiheadAttention(nn.Module):
         attn_output = rearrange(attn_output, "... heads seq d_v -> ... seq (heads d_v)")
 
         return self.o_proj(attn_output)
+
+
+class MultiheadAttentionWithRope(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        max_seq_len: int,
+        theta: float,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.num_heads = num_heads
+
+        # Following Attention is All You Need
+        d_k = d_v = d_model // num_heads
+
+        self.q_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
+        self.k_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
+        self.v_proj = Linear(num_heads * d_v, d_model, device=device, dtype=dtype)
+        self.o_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
+
+        self.rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len, device)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        """
+        x: (batch_size, seq_len, d_model)
+        token_positions: (batch_size, seq_len)
+        """
+        Q = self.q_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+        K = self.k_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+        V = self.v_proj(x)  # (batch_size, seq_len, num_heads * d_k)
+
+        # Apply RoPE
+        # Treat num_heads as a batch dimension, since RoPE is applied the same to each head
+        Q = rearrange(
+            Q, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
+        )
+        K = rearrange(
+            K, "... seq (heads d_k) -> ... heads seq d_k", heads=self.num_heads
+        )
+        V = rearrange(
+            V, "... seq (heads d_v) -> ... heads seq d_v", heads=self.num_heads
+        )
+
+        token_positions = rearrange(token_positions, "b s -> b 1 s")
+        Q = self.rope(Q, token_positions)
+        K = self.rope(K, token_positions)
+
+        attn_output = scaled_dot_product_attention(Q, K, V, is_causal=True)
+        attn_output = rearrange(attn_output, "... heads seq d_v -> ... seq (heads d_v)")
+
+        return self.o_proj(attn_output)
+
+
+class TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.mha = MultiheadAttention(d_model, num_heads, device, dtype)
+
+        self.ff = Linear()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (batch_size, seq_len, d_model)
+        """
+        pass
