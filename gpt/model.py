@@ -59,7 +59,7 @@ class RMSNorm(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.gain = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
+        self.weight = nn.Parameter(torch.ones(d_model, device=device, dtype=dtype))
         self.eps = eps
 
         self.d_model = d_model
@@ -79,7 +79,7 @@ class RMSNorm(nn.Module):
         rms = torch.sqrt(1 / self.d_model * x2_sum + self.eps)  # (batch_size, seq_len)
 
         # Return RMSNorm(a)
-        result = x / rms * self.gain
+        result = x / rms * self.weight
         return result.to(in_dtype)
 
 
@@ -101,9 +101,9 @@ class SwiGLU(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.w1 = nn.Parameter(torch.empty(d_ff, d_model, device=device, dtype=dtype))
-        self.w2 = nn.Parameter(torch.empty(d_model, d_ff, device=device, dtype=dtype))
-        self.w3 = nn.Parameter(torch.empty(d_ff, d_model, device=device, dtype=dtype))
+        self.w1 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w2 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w3 = Linear(d_ff, d_model, device=device, dtype=dtype)
 
         self.silu = SiLU()
 
@@ -113,8 +113,8 @@ class SwiGLU(nn.Module):
         output: (batch_size, seq_len, d_model)
         """
 
-        # SwiGLU = W_2 * (SiLU(W_1 * x) * W_3 * x))
-        return (self.silu(x @ self.w1.T) * (x @ self.w3.T)) @ self.w2.T
+        # SwiGLU = W_2 @ (SiLU(W_1 @ x) * W_3 @ x))
+        return self.w2(self.silu(self.w1(x)) * self.w3(x))
 
 
 class RotaryPositionalEmbedding(nn.Module):
@@ -235,7 +235,7 @@ class MultiheadAttention(nn.Module):
         self.q_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
         self.k_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
         self.v_proj = Linear(num_heads * d_v, d_model, device=device, dtype=dtype)
-        self.o_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -258,7 +258,7 @@ class MultiheadAttention(nn.Module):
         attn_output = scaled_dot_product_attention(Q, K, V, is_causal=True)
         attn_output = rearrange(attn_output, "... heads seq d_v -> ... seq (heads d_v)")
 
-        return self.o_proj(attn_output)
+        return self.output_proj(attn_output)
 
 
 class MultiheadAttentionWithRope(nn.Module):
@@ -281,7 +281,7 @@ class MultiheadAttentionWithRope(nn.Module):
         self.q_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
         self.k_proj = Linear(num_heads * d_k, d_model, device=device, dtype=dtype)
         self.v_proj = Linear(num_heads * d_v, d_model, device=device, dtype=dtype)
-        self.o_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
+        self.output_proj = Linear(d_model, num_heads * d_v, device=device, dtype=dtype)
 
         self.rope = RotaryPositionalEmbedding(theta, d_k, max_seq_len, device)
 
@@ -313,7 +313,7 @@ class MultiheadAttentionWithRope(nn.Module):
         attn_output = scaled_dot_product_attention(Q, K, V, is_causal=True)
         attn_output = rearrange(attn_output, "... heads seq d_v -> ... seq (heads d_v)")
 
-        return self.o_proj(attn_output)
+        return self.output_proj(attn_output)
 
 
 class TransformerBlock(nn.Module):
@@ -322,17 +322,25 @@ class TransformerBlock(nn.Module):
         d_model: int,
         num_heads: int,
         d_ff: int,
+        max_seq_len: int,
+        theta: float,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
 
-        self.mha = MultiheadAttention(d_model, num_heads, device, dtype)
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.attn = MultiheadAttentionWithRope(
+            d_model, num_heads, max_seq_len, theta, device, dtype
+        )
+        self.ffn = SwiGLU(d_model, d_ff, device, dtype)
 
-        self.ff = Linear()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         """
         x: (batch_size, seq_len, d_model)
+        token_positions: (batch_size, seq_len)
         """
-        pass
+
+        x = x + self.attn(self.ln1(x), token_positions)
+        return x + self.ffn(self.ln2(x))

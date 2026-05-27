@@ -21,6 +21,7 @@ from gpt.model import (
     RotaryPositionalEmbedding,
     SiLU,
     SwiGLU,
+    TransformerBlock,
     scaled_dot_product_attention,
     softmax,
 )
@@ -103,9 +104,9 @@ def run_swiglu(
     # You can also manually assign the weights
 
     swiglu = SwiGLU(d_model, d_ff)
-    swiglu.w1 = nn.Parameter(w1_weight)
-    swiglu.w2 = nn.Parameter(w2_weight)
-    swiglu.w3 = nn.Parameter(w3_weight)
+    swiglu.w1.weight = nn.Parameter(w1_weight)
+    swiglu.w2.weight = nn.Parameter(w2_weight)
+    swiglu.w3.weight = nn.Parameter(w3_weight)
     return swiglu(in_features)
 
 
@@ -165,7 +166,7 @@ def run_multihead_self_attention(
     mha.q_proj.weight = nn.Parameter(q_proj_weight)
     mha.k_proj.weight = nn.Parameter(k_proj_weight)
     mha.v_proj.weight = nn.Parameter(v_proj_weight)
-    mha.o_proj.weight = nn.Parameter(o_proj_weight)
+    mha.output_proj.weight = nn.Parameter(o_proj_weight)
 
     return mha(in_features)
 
@@ -211,7 +212,7 @@ def run_multihead_self_attention_with_rope(
     mha.q_proj.weight = nn.Parameter(q_proj_weight)
     mha.k_proj.weight = nn.Parameter(k_proj_weight)
     mha.v_proj.weight = nn.Parameter(v_proj_weight)
-    mha.o_proj.weight = nn.Parameter(o_proj_weight)
+    mha.output_proj.weight = nn.Parameter(o_proj_weight)
 
     return mha(in_features, token_positions)
 
@@ -309,7 +310,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    transformer = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
 
 
 def run_transformer_lm(
@@ -416,7 +417,7 @@ def run_rmsnorm(
     """
 
     rmsnorm = RMSNorm(d_model, eps)
-    rmsnorm.gain = nn.Parameter(weights)
+    rmsnorm.weight = nn.Parameter(weights)
 
     return rmsnorm(in_features)
 
