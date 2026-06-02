@@ -11,7 +11,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
-from gpt.optim import AdamW, cross_entropy
+from gpt.optim import AdamW, cross_entropy, lr_cosine_schedule
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
 from gpt.model import (
     Linear,
@@ -558,7 +558,9 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    return lr_cosine_schedule(
+        it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters
+    )
 
 
 def run_save_checkpoint(
