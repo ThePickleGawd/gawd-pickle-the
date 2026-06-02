@@ -11,7 +11,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
-from gpt.optim import AdamW, cross_entropy, lr_cosine_schedule
+from gpt.optim import AdamW, cross_entropy, gradient_clip, lr_cosine_schedule
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
 from gpt.model import (
     Linear,
@@ -523,7 +523,7 @@ def run_gradient_clipping(
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    gradient_clip(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:

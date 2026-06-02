@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import math
 
 import torch
@@ -90,3 +91,22 @@ def lr_cosine_schedule(t, a_max, a_min, T_w, T_c):
         )
     else:
         return a_min
+
+
+def gradient_clip(
+    parameters: Iterable[torch.nn.Parameter], max_l2_norm: float, eps: float = 10e-6
+):
+    squared_norm = 0
+    param_to_update = []
+    for param in parameters:
+        if param.grad is None:
+            continue
+
+        squared_norm += torch.sum(param.grad**2)
+        param_to_update.append(param)
+
+    norm = math.sqrt(squared_norm)
+
+    if norm > max_l2_norm:
+        for param in param_to_update:
+            param.grad = param.grad * max_l2_norm / (norm + eps)
