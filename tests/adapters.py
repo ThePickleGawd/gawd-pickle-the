@@ -11,7 +11,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
-from gpt.optim import cross_entropy
+from gpt.optim import AdamW, cross_entropy
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
 from gpt.model import (
     Linear,
@@ -530,7 +530,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return AdamW
 
 
 def run_get_lr_cosine_schedule(
