@@ -96,6 +96,10 @@ def lr_cosine_schedule(t, a_max, a_min, T_w, T_c):
 def gradient_clip(
     parameters: Iterable[torch.nn.Parameter], max_l2_norm: float, eps: float = 10e-6
 ):
+    """
+    Check if the L2 norm over all parameters exceeds max_l2_norm.
+    If so, apply normalization factor to all params
+    """
     squared_norm = 0
     param_to_update = []
     for param in parameters:
