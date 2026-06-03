@@ -11,6 +11,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 # My implementation
+from gpt.data import get_batch
 from gpt.optim import AdamW, cross_entropy, gradient_clip, lr_cosine_schedule
 from gpt.tokenizer.bpe import train_bpe, Tokenizer
 from gpt.model import (
@@ -475,7 +476,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
