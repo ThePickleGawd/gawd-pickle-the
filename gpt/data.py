@@ -1,13 +1,21 @@
 import os
-from typing import IO, BinaryIO
+from typing import IO, BinaryIO, Tuple
 
 import numpy.typing as npt
 import torch
 
 
-def get_batch(x: npt.NDArray, batch_size: int, context_length: int, device: str):
-    starts = torch.randint(0, len(x) - context_length, (batch_size,), device=device)
-    offsets = torch.arange(0, context_length, device=device)
+def get_batch(
+    x: npt.NDArray, batch_size: int, context_length: int, device: str
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Returns:
+    inputs: (batch_size, context_length)
+    targets: (batch_size, context_length)
+    """
+
+    starts = torch.randint(0, len(x) - context_length, (batch_size,), device=x.device)
+    offsets = torch.arange(0, context_length, device=x.device)
 
     indices = starts[:, None] + offsets[None, :]
     inputs = torch.tensor(x[indices], device=device)

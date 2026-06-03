@@ -6,8 +6,17 @@ import regex as re
 import json
 from typing import Iterator
 
-from gpt.tokenizer.pretokenization import get_pretokens_list_encode, get_pretokens_map_training
-from gpt.tokenizer.util import get_merged_pretoken_map_training, get_merged_pretoken_list_encode, gpt2_bytes_to_unicode, init_vocab, PRETOKEN_REGEX
+from gpt.tokenizer.pretokenization import (
+    get_pretokens_list_encode,
+    get_pretokens_map_training,
+)
+from gpt.tokenizer.util import (
+    get_merged_pretoken_map_training,
+    get_merged_pretoken_list_encode,
+    gpt2_bytes_to_unicode,
+    init_vocab,
+    PRETOKEN_REGEX,
+)
 
 
 class Tokenizer:
@@ -15,7 +24,7 @@ class Tokenizer:
         self,
         vocab: dict[int, bytes],
         merges: list[tuple[bytes, bytes]],
-        special_tokens: list[str] = []
+        special_tokens: list[str] = [],
     ):
         self.int2byte = vocab
         self.byte2int = {val: key for key, val in vocab.items()}
@@ -24,10 +33,7 @@ class Tokenizer:
 
     @classmethod
     def from_files(
-        cls,
-        vocab_path: str,
-        merges_path: str,
-        special_tokens: list[str] = []
+        cls, vocab_path: str, merges_path: str, special_tokens: list[str] = []
     ):
         gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
         with open(vocab_path) as vocab_f:
@@ -42,7 +48,9 @@ class Tokenizer:
         # just return the original bytes, so we don't force students to use
         # any particular encoding scheme.
         vocab = {
-            gpt2_vocab_index: bytes([gpt2_byte_decoder[token] for token in gpt2_vocab_item])
+            gpt2_vocab_index: bytes(
+                [gpt2_byte_decoder[token] for token in gpt2_vocab_item]
+            )
             for gpt2_vocab_item, gpt2_vocab_index in gpt2_vocab.items()
         }
         # If any of the special tokens don't exist in the vocab, append them to the vocab.
@@ -65,10 +73,13 @@ class Tokenizer:
         gpt2_byte_encoder = gpt2_bytes_to_unicode()
 
         # {printable_string_for_token: token_id}
-        gpt2_vocab_data = {"".join(gpt2_byte_encoder[b] for b in token_bytes): token_id for token_bytes, token_id in self.byte2int.items()}
+        gpt2_vocab_data = {
+            "".join(gpt2_byte_encoder[b] for b in token_bytes): token_id
+            for token_bytes, token_id in self.byte2int.items()
+        }
         with open(vocab_path, "w") as vocab_f:
             json.dump(gpt2_vocab_data, vocab_f, ensure_ascii=False)
-        
+
         with open(merges_path, "w", encoding="utf-8") as merges_f:
             merges_f.write("#version: 0.2\n")
             for left, right in self.merges:
@@ -82,7 +93,7 @@ class Tokenizer:
         # Convert to bytes and wrap like a file
         buffer = io.BytesIO()
         buffer.write(text.encode("utf-8"))
-        
+
         pretoken_list = get_pretokens_list_encode(buffer, self.special_tokens)
 
         # 2. Apply merges in order
@@ -90,14 +101,17 @@ class Tokenizer:
             pretoken_list = get_merged_pretoken_list_encode(pretoken_list, merge)
 
         # 3. Flatten list[tuple[bytes, ...]] to list[int]
-        return [self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple]
+        return [
+            self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple
+        ]
 
-    
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         buffer = ""
 
         # Don't process a possible special token
-        max_special_token_len = max(len(x) for x in  self.special_tokens) if self.special_tokens else 0
+        max_special_token_len = (
+            max(len(x) for x in self.special_tokens) if self.special_tokens else 0
+        )
 
         for chunk in iterable:
             buffer += chunk
@@ -123,11 +137,9 @@ class Tokenizer:
 
             buffer = safe_text[safe_end:] + remainder
 
-
         if buffer:
             yield from self.encode(buffer)
-        
-    
+
     def decode(self, ids: list[int]) -> str:
         # Convert ids to bytes
         text_bytes = b"".join([self.int2byte[id] for id in ids])
@@ -136,6 +148,7 @@ class Tokenizer:
 
         return text_bytes.decode("utf-8", errors="replace")
 
+
 def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
@@ -143,7 +156,7 @@ def train_bpe(
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     vocab = init_vocab(special_tokens)
-    
+
     with open(input_path, "rb") as f:
         pretoken_map = get_pretokens_map_training(f, special_tokens)
 
@@ -155,9 +168,9 @@ def train_bpe(
         freq: dict[tuple[bytes, bytes], int] = {}
         for pretoken, cnt in pretoken_map.items():
             for i in range(len(pretoken) - 1):
-                byte_pair = (pretoken[i], pretoken[i+1])
+                byte_pair = (pretoken[i], pretoken[i + 1])
                 freq[byte_pair] = freq.get(byte_pair, 0) + cnt
-        
+
         if len(freq) == 0:
             break
         most_freq_pair = max(freq, key=freq.get)
@@ -166,13 +179,16 @@ def train_bpe(
         # Merge all instances in the pretokens
         pretoken_map = get_merged_pretoken_map_training(pretoken_map, most_freq_pair)
         merges.append(most_freq_pair)
-    
+
     return vocab, merges
+
 
 if __name__ == "__main__":
     special_tokens = ["<|endoftext|>"]
-    vocab, merges = train_bpe("tests/fixtures/tinystories_sample.txt", 1024, special_tokens)
-    
+    vocab, merges = train_bpe(
+        "tests/fixtures/tinystories_sample.txt", 1024, special_tokens
+    )
+
     tokenizer = Tokenizer(vocab, merges, special_tokens)
     # print(vocab, merges)
 
@@ -193,11 +209,17 @@ if __name__ == "__main__":
         ids_iterable.append(id)
     print(tokenizer.decode(ids_iterable))
 
-    TOKENIZER_PATH = (pathlib.Path(__file__).resolve().parent.parent.parent) / "checkpoints" / "tokenizer"
+    TOKENIZER_PATH = (
+        (pathlib.Path(__file__).resolve().parent.parent.parent)
+        / "checkpoints"
+        / "tokenizer"
+    )
     vocab_path = TOKENIZER_PATH / "test_bpe_vocab.json"
     merges_path = TOKENIZER_PATH / "test_bpe_merges.txt"
     tokenizer.export(vocab_path, merges_path)
 
-    new_tokenizer = Tokenizer.from_files(vocab_path, merges_path, special_tokens=special_tokens + ["<|newspecialtoken|>"])
+    new_tokenizer = Tokenizer.from_files(
+        vocab_path, merges_path, special_tokens=special_tokens + ["<|newspecialtoken|>"]
+    )
     assert output == new_tokenizer.decode(new_tokenizer.encode(query))
     print("new tokenizer success")

@@ -86,11 +86,6 @@ class AdamW(torch.optim.Optimizer):
         return loss
 
 
-"""
-(Warm-up) If 𝑡 < 𝑇𝑤, then 𝛼𝑡 = 𝑡𝑇𝑤𝛼max.(Cosine annealing) If 𝑇𝑤 ≤ 𝑡 ≤ 𝑇𝑐, then 𝛼𝑡 = 𝛼min + 12 (1 + cos( 𝑡−𝑇𝑤𝑇𝑐−𝑇𝑤𝜋))(𝛼max − 𝛼min).(Post-annealing) If 𝑡 > 𝑇𝑐, then 𝛼𝑡 = 𝛼min.Problem (learning_rate_schedule): Implement cosine learning rate schedule with warmup(1 point)8It’s sometimes common to use a schedule where the learning rate rises back up (restarts) to help get past local minima.33Write a function that takes 𝑡, 𝛼max, 𝛼min, 𝑇𝑤 and 𝑇𝑐, and returns the learning rate 𝛼𝑡 according to
-"""
-
-
 def lr_cosine_schedule(t, a_max, a_min, T_w, T_c):
     if t < T_w:
         return t / T_w * a_max

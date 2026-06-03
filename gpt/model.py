@@ -340,6 +340,8 @@ class TransformerBlock(nn.Module):
         """
         x: (batch_size, seq_len, d_model)
         token_positions: (batch_size, seq_len)
+
+        output: (batch_size, seq_len, d_model)
         """
 
         x = x + self.attn(self.ln1(x), token_positions)
@@ -369,11 +371,13 @@ class TransformerLM(nn.Module):
             for _ in range(num_layers)
         )
         self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
-        self.lm_head = Linear(d_model, vocab_size)
+        self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
 
     def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
         """
         token_ids: (batch_size, seq_len)
+
+        output (logits): (batch_size, seq_len, vocab_size)
         """
 
         seq_len = token_ids.size(-1)
