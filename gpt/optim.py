@@ -55,9 +55,16 @@ class AdamW(torch.optim.Optimizer):
                     continue
 
                 # Get iteration (t) and moments (m, v)
-                t, m, v = self.state.get(
-                    p, (0, torch.zeros_like(p), torch.zeros_like(p))
-                )
+                if not self.state[p]:
+                    self.state[p] = {
+                        "t": 0,
+                        "m": torch.zeros_like(p),
+                        "v": torch.zeros_like(p),
+                    }
+
+                t = self.state[p]["t"]
+                m = self.state[p]["m"]
+                v = self.state[p]["v"]
 
                 # 1. Compute gradients for loss
                 grad = p.grad.data
@@ -72,7 +79,9 @@ class AdamW(torch.optim.Optimizer):
                 # 5. Apply momentum
                 p.data -= lr_t * m / (torch.sqrt(v) + eps)
 
-                self.state[p] = (t + 1, m, v)
+                self.state[p]["t"] = t + 1
+                self.state[p]["m"] = m
+                self.state[p]["v"] = v
 
         return loss
 
