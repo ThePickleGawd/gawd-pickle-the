@@ -4,7 +4,7 @@ from einops import rearrange
 import torch
 import numpy as np
 
-from gpt.data import get_batch
+from gpt.data import get_batch, save_checkpoint
 from gpt.model import TransformerLM
 from gpt.optim import AdamW, cross_entropy, gradient_clip
 from gpt.tokenizer.bpe import Tokenizer
@@ -19,7 +19,7 @@ tokenizer = Tokenizer.from_files(vocab_path, merges_path)
 train_path = "data/train.npy"
 
 # Settings
-device = "cpu"
+device = "mps"
 
 
 def train_gpt():
@@ -38,7 +38,7 @@ def train_gpt():
 
     optim = AdamW(model.parameters())
 
-    for t in range(5):
+    for t in range(10000):
         model.train()
         optim.zero_grad()
 
@@ -65,7 +65,14 @@ def train_gpt():
         optim.step()
 
         # Logs
-        print(f"Loss: {loss.item()}")
+        if t % 15 == 0:
+            print(f"Loss: {loss.item()}")
+            sample_out = logits[0].argmax(dim=-1).detach().cpu().tolist()
+            print(tokenizer.decode(sample_out))
+
+        if t % 1000 == 0:
+            print("=== Saving checkpoint ===")
+            save_checkpoint(model, optim, t, f"checkpoints/model/{t}.pth")
 
 
 if __name__ == "__main__":
