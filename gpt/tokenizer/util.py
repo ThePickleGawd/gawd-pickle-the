@@ -1,42 +1,47 @@
 from functools import lru_cache
 
-PRETOKEN_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+PRETOKEN_REGEX = (
+    r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+)
 
 
 # Return special tokens + all 256 byte encodings
 def init_vocab(special_tokens) -> dict[int, bytes]:
-    vocab_list = [bytes([i]) for i in range(256)] + [token.encode("utf-8") for token in special_tokens] 
+    vocab_list = [bytes([i]) for i in range(256)] + [
+        token.encode("utf-8") for token in special_tokens
+    ]
     return {i: vocab_list[i] for i in range(len(vocab_list))}
 
 
-def get_merged_pretoken_map_training(pretoken_map: dict[tuple[bytes, ...], int], merge_pair: tuple[bytes, bytes]):
-    updated_map = {}
-
-    for pretoken, cnt in pretoken_map.items():
-        updated_pretoken = []
-        i = 0
-        while i < len(pretoken):
-            # Add merge token only if it's the most freq pair
-            if i + 1 < len(pretoken) and (pretoken[i], pretoken[i+1]) == merge_pair:
-                updated_pretoken.append(b"".join(merge_pair))
-                i += 2
-            else:
-                updated_pretoken.append(pretoken[i])
-                i += 1
-        updated_pretoken = tuple(updated_pretoken)
-        updated_map[updated_pretoken] = updated_map.get(updated_pretoken, 0) + cnt
-
-    return updated_map
+def merge_pretoken(
+    pretoken: tuple[bytes, ...], merge_pair: tuple[bytes, bytes]
+) -> tuple[bytes, ...]:
+    updated_pretoken = []
+    i = 0
+    while i < len(pretoken):
+        # Add merge token only if it's the most freq pair
+        if i + 1 < len(pretoken) and (pretoken[i], pretoken[i + 1]) == merge_pair:
+            updated_pretoken.append(b"".join(merge_pair))
+            i += 2
+        else:
+            updated_pretoken.append(pretoken[i])
+            i += 1
+    return tuple(updated_pretoken)
 
 
-def get_merged_pretoken_list_encode(pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]) -> list[tuple[bytes, ...]]:
+def get_merged_pretoken_list_encode(
+    pretoken_list: list[tuple[bytes, ...]], merge_pair: tuple[bytes, bytes]
+) -> list[tuple[bytes, ...]]:
     updated_list: list[tuple[bytes]] = []
 
     for pretoken_tuple in pretoken_list:
         i = 0
         updated_pretoken: list[bytes] = []
         while i < len(pretoken_tuple):
-            if i + 1 < len(pretoken_tuple) and (pretoken_tuple[i], pretoken_tuple[i+1]) == merge_pair:
+            if (
+                i + 1 < len(pretoken_tuple)
+                and (pretoken_tuple[i], pretoken_tuple[i + 1]) == merge_pair
+            ):
                 updated_pretoken.append(b"".join(merge_pair))
                 i += 2
             else:
@@ -45,7 +50,6 @@ def get_merged_pretoken_list_encode(pretoken_list: list[tuple[bytes, ...]], merg
         updated_list.append(tuple(updated_pretoken))
 
     return updated_list
-
 
 
 @lru_cache
@@ -78,7 +82,11 @@ def gpt2_bytes_to_unicode() -> dict[int, str]:
     """
     # These 188 integers can used as-is, since they are not whitespace or control characters.
     # See https://www.ssec.wisc.edu/~tomw/java/unicode.html.
-    bs = list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    bs = (
+        list(range(ord("!"), ord("~") + 1))
+        + list(range(ord("¡"), ord("¬") + 1))
+        + list(range(ord("®"), ord("ÿ") + 1))
+    )
     cs = bs[:]
     # now get the representations of the other 68 integers that do need shifting
     # each will get mapped chr(256 + n), where n will grow from 0...67 in the loop
