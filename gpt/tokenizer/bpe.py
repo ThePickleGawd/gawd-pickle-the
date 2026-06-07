@@ -1,21 +1,21 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+import heapq
 import os
 import io
 import pathlib
 import regex as re
 import json
-from typing import Iterator
 
 from gpt.tokenizer.pretokenization import (
     get_pretokens_list_encode,
     get_pretokens_map_training,
 )
 from gpt.tokenizer.util import (
-    get_merged_pretoken_map_training,
     get_merged_pretoken_list_encode,
     gpt2_bytes_to_unicode,
     init_vocab,
     PRETOKEN_REGEX,
+    merge_pretoken,
 )
 
 
@@ -161,23 +161,97 @@ def train_bpe(
         pretoken_map = get_pretokens_map_training(f, special_tokens)
 
     merges: list[tuple[bytes, bytes]] = []
+    freq: dict[tuple[bytes, bytes], int] = {}
+    pair_heap: list[tuple[int, tuple[tuple[int, ...], ...], tuple[bytes, bytes]]] = []
+    pair2pretoken: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]] = {}
+
+    # Fill freq table once (cached for later)
+    for pretoken, cnt in pretoken_map.items():
+        for i in range(len(pretoken) - 1):
+            byte_pair = (pretoken[i], pretoken[i + 1])
+            freq[byte_pair] = freq.get(byte_pair, 0) + cnt
+
+            # Optimization: map byte pair to corresponding pretoken
+            if byte_pair not in pair2pretoken:
+                pair2pretoken[byte_pair] = set()
+            pair2pretoken[byte_pair].add(pretoken)
+
+    # Heap for efficient acces to max element
+    for byte_pair, cnt in freq.items():
+        reversed_byte_pair = tuple(
+            tuple([255 - b for b in token] + [256]) for token in byte_pair
+        )
+        heapq.heappush(pair_heap, (-cnt, reversed_byte_pair, byte_pair))
 
     # Merge + add to vocab until vocab size is met
     while len(vocab) < vocab_size:
-        # Find most frequent pair
-        freq: dict[tuple[bytes, bytes], int] = {}
-        for pretoken, cnt in pretoken_map.items():
-            for i in range(len(pretoken) - 1):
-                byte_pair = (pretoken[i], pretoken[i + 1])
-                freq[byte_pair] = freq.get(byte_pair, 0) + cnt
+        # Find most frequent pair, ignoring stale entries
+        most_freq_pair = None
+        while len(pair_heap) != 0:
+            neg_cnt, _, byte_pair = heapq.heappop(pair_heap)
+            if byte_pair in freq and freq[byte_pair] == -neg_cnt:
+                most_freq_pair = byte_pair
+                break
 
-        if len(freq) == 0:
+        if not most_freq_pair:
             break
-        most_freq_pair = max(freq, key=freq.get)
-        vocab[len(vocab)] = most_freq_pair[0] + most_freq_pair[1]
 
-        # Merge all instances in the pretokens
-        pretoken_map = get_merged_pretoken_map_training(pretoken_map, most_freq_pair)
+        # Add new token to vocab list
+        most_freq_pair_bytes = b"".join(most_freq_pair)
+        vocab[len(vocab)] = most_freq_pair_bytes
+
+        # Bookkeeping for all possibly affected pretokens
+        for affected_pretoken in list(pair2pretoken[most_freq_pair]):
+            # Ignore stale entries
+            affected_pretoken_cnt = (
+                pretoken_map[affected_pretoken]
+                if affected_pretoken in pretoken_map
+                else 0
+            )
+            if affected_pretoken_cnt <= 0:
+                continue
+
+            # Apply merge to affected pretoken
+            updated_pretoken = merge_pretoken(affected_pretoken, most_freq_pair)
+
+            # Stale entry, most_freq_pair not in affected pretoken
+            if updated_pretoken == affected_pretoken:
+                continue
+
+            # Update book keeping
+            pretoken_map[updated_pretoken] = (
+                pretoken_map.get(updated_pretoken, 0) + affected_pretoken_cnt
+            )
+            pretoken_map[affected_pretoken] -= affected_pretoken_cnt
+            if pretoken_map[affected_pretoken] <= 0:
+                pretoken_map.pop(affected_pretoken)
+
+            for i in range(len(affected_pretoken) - 1):
+                byte_pair = (affected_pretoken[i], affected_pretoken[i + 1])
+                freq[byte_pair] -= affected_pretoken_cnt
+                if freq[byte_pair] <= 0:
+                    freq.pop(byte_pair)
+                else:
+                    reversed_byte_pair = tuple(
+                        tuple([255 - b for b in token] + [256]) for token in byte_pair
+                    )
+                    heapq.heappush(
+                        pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair)
+                    )
+
+            for i in range(len(updated_pretoken) - 1):
+                byte_pair = (updated_pretoken[i], updated_pretoken[i + 1])
+                freq[byte_pair] = freq.get(byte_pair, 0) + affected_pretoken_cnt
+
+                if byte_pair not in pair2pretoken:
+                    pair2pretoken[byte_pair] = set()
+                pair2pretoken[byte_pair].add(updated_pretoken)
+
+                reversed_byte_pair = tuple(
+                    tuple([255 - b for b in token] + [256]) for token in byte_pair
+                )
+                heapq.heappush(pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair))
+
         merges.append(most_freq_pair)
 
     return vocab, merges
