@@ -19,7 +19,7 @@ tokenizer = Tokenizer.from_files(vocab_path, merges_path)
 train_path = "data/train.npy"
 
 # Settings
-device = "mps"
+device = "cuda"
 
 
 def train_gpt():

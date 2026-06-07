@@ -6,20 +6,19 @@ vocab_path = "checkpoints/tokenizer/vocab.txt"
 merges_path = "checkpoints/tokenizer/merges.txt"
 special_tokens = ["<|endoftext|>"]
 
-input_path = "tests/fixtures/tinystories_sample_5M.txt"
+input_data_path = "data/TinyStoriesV2-GPT4-train.txt"
+input_val_path = "data/TinyStoriesV2-GPT4-valid.txt"
 train_out_path = "data/train.npy"
 val_out_path = "data/val.npy"
 
 tokenizer = Tokenizer.from_files(vocab_path, merges_path, special_tokens)
 
 # Load data
-with open(input_path, "r") as f:
-    data = f.read()
+with open(input_data_path, "r") as f:
+    train_data = f.read()
 
-n = len(data)
-
-train_data = data[: int(n * 0.9)]
-val_data = data[int(n * 0.9) :]
+with open(input_val_path, "r") as f:
+    val_data = f.read()
 
 # Encode data
 train_ids = tokenizer.encode(train_data)
