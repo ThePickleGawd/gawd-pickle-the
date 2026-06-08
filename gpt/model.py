@@ -363,6 +363,7 @@ class TransformerLM(nn.Module):
     ) -> None:
         super().__init__()
 
+        self.context_length = context_length
         self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
         self.layers = nn.ModuleList(
             TransformerBlock(
@@ -391,3 +392,44 @@ class TransformerLM(nn.Module):
 
         x = self.ln_final(x)
         return self.lm_head(x)
+
+    def generate(
+        self,
+        token_ids: torch.Tensor,
+        max_new_tokens: int | None = None,
+        eos_token_id: int = 257,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+    ):
+        """
+        token_ids: (batch_size, seq_len)
+        """
+
+        assert token_ids.size(0) == 1, "Batch size must be 1"
+
+        start_len = token_ids.size(-1)
+        while token_ids.size(-1) - start_len < max_new_tokens:
+            output = self.forward(
+                token_ids[:, -self.context_length :]
+            )  # (batch_size, seq_len, vocab_size)
+            probs = softmax(output / temperature, dim=-1)
+
+            # Find top-p candidates
+            sorted_probs, sorted_probs_idx = torch.sort(
+                probs[0, -1], descending=True
+            )  # (vocab_size,)
+            top_p_mask = torch.cumsum(sorted_probs, dim=-1) <= top_p  # (vocab_size,)
+            top_p_mask[0] = True
+            top_p_sum = sorted_probs[top_p_mask].sum().item()
+            top_p_probs = sorted_probs[top_p_mask] / top_p_sum
+
+            # Sample
+            sampled_idx = torch.multinomial(top_p_probs, 1).item()
+            sampled_token = sorted_probs_idx[sampled_idx]
+
+            token_ids = torch.cat((token_ids, sampled_token.view(1, 1)), dim=1)
+
+            if sampled_token == eos_token_id:
+                break
+
+        return token_ids
