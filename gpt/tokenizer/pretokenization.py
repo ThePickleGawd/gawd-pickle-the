@@ -1,7 +1,7 @@
 import os
 from typing import BinaryIO
 import regex as re
-from gpt.tokenizer.util import PRETOKEN_REGEX
+from gpt.tokenizer.util import BYTE_TOKENS, PRETOKEN_REGEX
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -74,9 +74,8 @@ def get_pretokens_map_training(file: BinaryIO, special_tokens: list[str] = []) -
         # Split special tokens, then by pretoken regex
         for pretoken_chunk in pretoken_chunks:
             for pretoken_match in re.finditer(PRETOKEN_REGEX, pretoken_chunk):
-                pretoken = tuple(bytes([b]) 
-                                 for tok in pretoken_match.group()
-                                 for b in tok.encode("utf-8") ) # tuple[byte, ...]
+                encoded = pretoken_match.group().encode("utf-8")
+                pretoken = tuple(BYTE_TOKENS[b] for b in encoded)
                 pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
         
     return pretoken_cnts
@@ -119,7 +118,7 @@ def get_pretokens_list_encode(file: BinaryIO, special_tokens: list[str] = []) ->
 
         for pretoken_match in re.finditer(pretoken_regex, pretoken_chunk):
             encoded = pretoken_match.group().encode("utf-8") # bytes: b"abc"
-            pretoken_list_bytes.append(tuple(bytes([b]) for b in encoded))
+            pretoken_list_bytes.append(tuple(BYTE_TOKENS[b] for b in encoded))
     
     return pretoken_list_bytes
     
