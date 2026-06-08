@@ -1,4 +1,7 @@
 import argparse
+import csv
+from datetime import datetime
+from pathlib import Path
 
 from einops import rearrange
 import torch
@@ -20,17 +23,19 @@ train_path = "data/tinystories_train.npy"
 
 # Settings
 device = "cuda"
+log_dir = "logs"
+log_every = 15
 
 
 def train_gpt():
     # Setup
     model = TransformerLM(
-        vocab_size=1024,
+        vocab_size=10000,
         context_length=256,
-        d_model=384,
-        num_layers=6,
-        num_heads=6,
-        d_ff=1536,
+        d_model=512,
+        num_layers=4,
+        num_heads=16,
+        d_ff=1344,
         theta=1e4,
         device=device,
         dtype=torch.float32,
@@ -38,41 +43,53 @@ def train_gpt():
 
     optim = AdamW(model.parameters())
 
-    for t in range(10000):
-        model.train()
-        optim.zero_grad()
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    log_path = Path(log_dir) / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+    print(f"Logging to: {log_path}")
 
-        # Get data
-        train_data = np.memmap(train_path, dtype=np.uint16, mode="r")
-        inputs, targets = get_batch(
-            train_data, batch_size=8, context_length=256, device=device
-        )  # (batch_size, seq_len)
+    with open(log_path, "w", newline="") as log_f:
+        logger = csv.DictWriter(log_f, fieldnames=["step", "loss"])
+        logger.writeheader()
 
-        inputs = inputs.to(device=device, dtype=torch.long)
-        targets = targets.to(device=device, dtype=torch.long)
+        for t in range(10000):
+            model.train()
+            optim.zero_grad()
 
-        # Run forward pass
-        logits = model.forward(inputs)  # (batch_size, seq_len, vocab_size)
+            # Get data
+            train_data = np.memmap(train_path, dtype=np.uint16, mode="r")
+            inputs, targets = get_batch(
+                train_data, batch_size=8, context_length=256, device=device
+            )  # (batch_size, seq_len)
 
-        # Loss
-        loss = cross_entropy(
-            rearrange(logits, "b s v -> (b s) v"), rearrange(targets, "b s -> (b s)")
-        )
-        loss.backward()
+            inputs = inputs.to(device=device, dtype=torch.long)
+            targets = targets.to(device=device, dtype=torch.long)
 
-        # Optimize
-        gradient_clip(model.parameters(), max_l2_norm=1.0)
-        optim.step()
+            # Run forward pass
+            logits = model.forward(inputs)  # (batch_size, seq_len, vocab_size)
 
-        # Logs
-        if t % 15 == 0:
-            print(f"Loss: {loss.item()}")
-            sample_out = logits[0].argmax(dim=-1).detach().cpu().tolist()
-            print(tokenizer.decode(sample_out))
+            # Loss
+            loss = cross_entropy(
+                rearrange(logits, "b s v -> (b s) v"), rearrange(targets, "b s -> (b s)")
+            )
+            loss.backward()
 
-        if t % 1000 == 0:
-            print("=== Saving checkpoint ===")
-            save_checkpoint(model, optim, t, f"checkpoints/model/{t}.pth")
+            # Optimize
+            gradient_clip(model.parameters(), max_l2_norm=1.0)
+            optim.step()
+
+            # Logs
+            if t % log_every == 0:
+                loss_value = loss.item()
+                logger.writerow({"step": t, "loss": loss_value})
+                log_f.flush()
+
+                print(f"Loss: {loss_value}")
+                sample_out = logits[0].argmax(dim=-1).detach().cpu().tolist()
+                print(tokenizer.decode(sample_out))
+
+            if t % 1000 == 0:
+                print("=== Saving checkpoint ===")
+                save_checkpoint(model, optim, t, f"checkpoints/model/{t}.pth")
 
 
 if __name__ == "__main__":
