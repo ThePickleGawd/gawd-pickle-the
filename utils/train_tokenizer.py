@@ -12,7 +12,7 @@ special_tokens = ["<|endoftext|>"]
 
 t0 = time.time()
 
-vocab, merges = train_bpe(input_path, 10000, special_tokens)
+vocab, merges = train_bpe(input_path, 10000, special_tokens, num_processes=32)
 tokenizer = Tokenizer(vocab, merges, special_tokens)
 
 print(f"Exporting to:\n vocab: {vocab_path}\n merges: {merges_path}")
