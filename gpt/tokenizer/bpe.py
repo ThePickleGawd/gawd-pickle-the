@@ -31,6 +31,39 @@ class Tokenizer:
         self.merges = merges
         self.special_tokens = special_tokens
 
+        # Optimization
+        self.encode_cache = {}
+        self.merge_ranks = {pair: rank for rank, pair in enumerate(self.merges)}
+
+    def _encode_pretoken(self, pretoken: tuple[bytes, ...]) -> list[int]:
+        cached = self.encode_cache.get(pretoken)
+        if cached is not None:
+            return cached
+
+        parts = list(pretoken)
+
+        while len(parts) > 1:
+            best_i = None
+            best_rank = float("inf")
+
+            # Find the highest rank merge applicable
+            for i in range(len(parts) - 1):
+                rank = self.merge_ranks.get((parts[i], parts[i+1]))
+                if rank is not None and rank < best_rank:
+                    best_rank = rank
+                    best_i = i
+            
+            if best_i is None:
+                break
+
+            # Apply merge
+            parts[best_i : best_i+2] = [parts[best_i] + parts[best_i+1]]
+
+        ids = [self.byte2int[p] for p in parts]
+        self.encode_cache[pretoken] = ids
+        return ids
+
+
     @classmethod
     def from_files(
         cls, vocab_path: str, merges_path: str, special_tokens: list[str] = []
@@ -91,19 +124,14 @@ class Tokenizer:
         # 1. Pretokenize
 
         # Convert to bytes and wrap like a file
-        buffer = io.BytesIO()
-        buffer.write(text.encode("utf-8"))
-
+        buffer = io.BytesIO(text.encode("utf-8"))
         pretoken_list = get_pretokens_list_encode(buffer, self.special_tokens)
 
-        # 2. Apply merges in order
-        for merge in self.merges:
-            pretoken_list = get_merged_pretoken_list_encode(pretoken_list, merge)
-
-        # 3. Flatten list[tuple[bytes, ...]] to list[int]
-        return [
-            self.byte2int[b] for pretoken_tuple in pretoken_list for b in pretoken_tuple
-        ]
+        ids = []
+        for pretoken in pretoken_list:
+            ids.extend(self._encode_pretoken(pretoken))
+        
+        return ids
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
         buffer = ""
@@ -250,7 +278,9 @@ def train_bpe(
                 reversed_byte_pair = tuple(
                     tuple([255 - b for b in token] + [256]) for token in byte_pair
                 )
-                heapq.heappush(pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair))
+                heapq.heappush(
+                    pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair)
+                )
 
         merges.append(most_freq_pair)
 
@@ -286,6 +316,7 @@ if __name__ == "__main__":
     TOKENIZER_PATH = (
         (pathlib.Path(__file__).resolve().parent.parent.parent)
         / "checkpoints"
+        / "test"
         / "tokenizer"
     )
     vocab_path = TOKENIZER_PATH / "test_bpe_vocab.json"
