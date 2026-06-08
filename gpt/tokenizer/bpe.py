@@ -18,6 +18,19 @@ from gpt.tokenizer.util import (
     merge_pretoken,
 )
 
+# Want lexicographically larger for heap
+class MaxPair:
+    __slots__ = ("pair",)
+
+    def __init__(self, pair: tuple[bytes, bytes]):
+        self.pair = pair
+
+    def __lt__(self, other: "MaxPair") -> bool:
+        return self.pair > other.pair
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, MaxPair) and self.pair == other.pair
+
 
 class Tokenizer:
     def __init__(
@@ -181,17 +194,28 @@ def train_bpe(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
+    num_processes: int = 1,
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     vocab = init_vocab(special_tokens)
 
     with open(input_path, "rb") as f:
-        pretoken_map = get_pretokens_map_training(f, special_tokens)
+        pretoken_map = get_pretokens_map_training(
+            f, special_tokens, num_processes=num_processes
+        )
 
     merges: list[tuple[bytes, bytes]] = []
     freq: dict[tuple[bytes, bytes], int] = {}
-    pair_heap: list[tuple[int, tuple[tuple[int, ...], ...], tuple[bytes, bytes]]] = []
+    pair_heap: list[tuple[int, MaxPair, tuple[bytes, bytes]]] = []
+    pair_key_cache: dict[tuple[bytes, bytes], MaxPair] = {}
     pair2pretoken: dict[tuple[bytes, bytes], set[tuple[bytes, ...]]] = {}
+
+    def push_pair(byte_pair: tuple[bytes, bytes]) -> None:
+        pair_key = pair_key_cache.get(byte_pair)
+        if pair_key is None:
+            pair_key = MaxPair(byte_pair)
+            pair_key_cache[byte_pair] = pair_key
+        heapq.heappush(pair_heap, (-freq[byte_pair], pair_key, byte_pair))
 
     # Fill freq table once (cached for later)
     for pretoken, cnt in pretoken_map.items():
@@ -204,24 +228,20 @@ def train_bpe(
                 pair2pretoken[byte_pair] = set()
             pair2pretoken[byte_pair].add(pretoken)
 
-    # Heap for efficient acces to max element
-    for byte_pair, cnt in freq.items():
-        reversed_byte_pair = tuple(
-            tuple([255 - b for b in token] + [256]) for token in byte_pair
-        )
-        heapq.heappush(pair_heap, (-cnt, reversed_byte_pair, byte_pair))
+    for byte_pair in freq:
+        push_pair(byte_pair)
 
     # Merge + add to vocab until vocab size is met
     while len(vocab) < vocab_size:
-        # Find most frequent pair, ignoring stale entries
+        # Find most frequent pair, ignoring stale heap entries.
         most_freq_pair = None
-        while len(pair_heap) != 0:
+        while pair_heap:
             neg_cnt, _, byte_pair = heapq.heappop(pair_heap)
             if byte_pair in freq and freq[byte_pair] == -neg_cnt:
                 most_freq_pair = byte_pair
                 break
 
-        if not most_freq_pair:
+        if most_freq_pair is None:
             break
 
         # Add new token to vocab list
@@ -260,12 +280,7 @@ def train_bpe(
                 if freq[byte_pair] <= 0:
                     freq.pop(byte_pair)
                 else:
-                    reversed_byte_pair = tuple(
-                        tuple([255 - b for b in token] + [256]) for token in byte_pair
-                    )
-                    heapq.heappush(
-                        pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair)
-                    )
+                    push_pair(byte_pair)
 
             for i in range(len(updated_pretoken) - 1):
                 byte_pair = (updated_pretoken[i], updated_pretoken[i + 1])
@@ -274,13 +289,7 @@ def train_bpe(
                 if byte_pair not in pair2pretoken:
                     pair2pretoken[byte_pair] = set()
                 pair2pretoken[byte_pair].add(updated_pretoken)
-
-                reversed_byte_pair = tuple(
-                    tuple([255 - b for b in token] + [256]) for token in byte_pair
-                )
-                heapq.heappush(
-                    pair_heap, (-freq[byte_pair], reversed_byte_pair, byte_pair)
-                )
+                push_pair(byte_pair)
 
         merges.append(most_freq_pair)
 

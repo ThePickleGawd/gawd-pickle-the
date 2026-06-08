@@ -1,3 +1,5 @@
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 import os
 from typing import BinaryIO
 import regex as re
@@ -49,36 +51,71 @@ def find_chunk_boundaries(
     # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
-# For BPE training, we need dictionary of { pretoken: count }
-# We will filter out all special tokens, since we don't need stats on this
-def get_pretokens_map_training(file: BinaryIO, special_tokens: list[str] = []) -> dict[tuple[bytes, ...], int]:
-    num_processes = 4
-    boundaries = find_chunk_boundaries(file, num_processes, b"<|endoftext|>")
 
-    pretoken_cnts: dict[tuple[bytes, ...], int] = {}
+def _count_pretokens_chunk(
+    args: tuple[str, int, int, tuple[str, ...]],
+) -> Counter[tuple[bytes, ...]]:
+    input_path, start, end, special_tokens = args
 
-    # The following is a serial implementation, but you can parallelize this
-    # by sending each start/end pair to a set of processes.
-    for start, end in zip(boundaries[:-1], boundaries[1:]):
+    with open(input_path, "rb") as file:
         file.seek(start)
         chunk = file.read(end - start).decode("utf-8", errors="ignore")
-        # Run pre-tokenization on your chunk and store the counts for each pre-token
 
-        if special_tokens:
-            # Regex with largest first to prevent any prefix special tokens firing first
-            special_tokens_regex = "|".join(re.escape(token) for token in sorted(special_tokens, key=lambda x: len(x), reverse=True))
-            pretoken_chunks = re.split(special_tokens_regex, chunk)
-        else:
-            pretoken_chunks = [chunk]
+    pretoken_cnts: Counter[tuple[bytes, ...]] = Counter()
 
-        # Split special tokens, then by pretoken regex
-        for pretoken_chunk in pretoken_chunks:
-            for pretoken_match in re.finditer(PRETOKEN_REGEX, pretoken_chunk):
-                encoded = pretoken_match.group().encode("utf-8")
-                pretoken = tuple(BYTE_TOKENS[b] for b in encoded)
-                pretoken_cnts[pretoken] = pretoken_cnts.get(pretoken, 0) + 1
-        
+    if special_tokens:
+        # Regex with largest first to prevent any prefix special tokens firing first
+        special_tokens_regex = "|".join(
+            re.escape(token)
+            for token in sorted(special_tokens, key=lambda x: len(x), reverse=True)
+        )
+        pretoken_chunks = re.split(special_tokens_regex, chunk)
+    else:
+        pretoken_chunks = [chunk]
+
+    # Split special tokens, then by pretoken regex
+    for pretoken_chunk in pretoken_chunks:
+        for pretoken_match in re.finditer(PRETOKEN_REGEX, pretoken_chunk):
+            encoded = pretoken_match.group().encode("utf-8")
+            pretoken = tuple(BYTE_TOKENS[b] for b in encoded)
+            pretoken_cnts[pretoken] += 1
+
     return pretoken_cnts
+
+# For BPE training, we need dictionary of { pretoken: count }
+# We will filter out all special tokens, since we don't need stats on this
+def get_pretokens_map_training(
+    file: BinaryIO,
+    special_tokens: list[str] = [],
+    num_processes: int = 8,
+) -> dict[tuple[bytes, ...], int]:
+    if special_tokens:
+        boundaries = find_chunk_boundaries(
+            file, num_processes, special_tokens[0].encode("utf-8")
+        )
+    else:
+        file.seek(0, os.SEEK_END)
+        boundaries = [0, file.tell()]
+        file.seek(0)
+
+    chunks = list(zip(boundaries[:-1], boundaries[1:]))
+
+    jobs = [
+        (file.name, start, end, tuple(special_tokens))
+        for start, end in chunks
+    ]
+
+    pretoken_cnts: Counter[tuple[bytes, ...]] = Counter()
+
+    if num_processes <= 1 or len(jobs) <= 1:
+        for job in jobs:
+            pretoken_cnts.update(_count_pretokens_chunk(job))
+    else:
+        with ProcessPoolExecutor(max_workers=num_processes) as pool:
+            for chunk_counts in pool.map(_count_pretokens_chunk, jobs):
+                pretoken_cnts.update(chunk_counts)
+
+    return dict(pretoken_cnts)
 
 
 # For Tokenizer encoding, we need a list of the pretokens -- each is a tuple
