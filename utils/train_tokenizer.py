@@ -3,10 +3,17 @@ import time
 
 from gpt.tokenizer.bpe import Tokenizer, train_bpe
 
-vocab_path = "checkpoints/tokenizer/tinystories/vocab.txt"
-merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
+# TinyStories
+# vocab_path = "checkpoints/tokenizer/tinystories/vocab.txt"
+# merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
 
-input_path = "data/TinyStoriesV2-GPT4-train.txt"
+# input_path = "data/TinyStoriesV2-GPT4-train.txt"
+
+# OWT
+vocab_path = "checkpoints/tokenizer/owt/vocab.txt"
+merges_path = "checkpoints/tokenizer/owt/merges.txt"
+
+input_path = "data/owt_train.txt"
 
 special_tokens = ["<|endoftext|>"]
 

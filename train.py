@@ -16,7 +16,7 @@ merges_path = "checkpoints/tokenizer/merges.txt"
 tokenizer = Tokenizer.from_files(vocab_path, merges_path)
 
 # Data
-train_path = "data/train.npy"
+train_path = "data/tinystories_train.npy"
 
 # Settings
 device = "cuda"
