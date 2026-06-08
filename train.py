@@ -13,8 +13,8 @@ from gpt.optim import AdamW, cross_entropy, gradient_clip
 from gpt.tokenizer.bpe import Tokenizer
 
 # Tokenizer
-vocab_path = "checkpoints/tokenizer/vocab.txt"
-merges_path = "checkpoints/tokenizer/merges.txt"
+vocab_path = "checkpoints/tokenizer/tinystories/vocab.txt"
+merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
 
 tokenizer = Tokenizer.from_files(vocab_path, merges_path)
 
@@ -25,13 +25,14 @@ train_path = "data/tinystories_train.npy"
 device = "cuda"
 log_dir = "logs"
 log_every = 15
+context_length = 256
 
 
 def train_gpt():
     # Setup
     model = TransformerLM(
         vocab_size=10000,
-        context_length=256,
+        context_length=context_length,
         d_model=512,
         num_layers=4,
         num_heads=16,
@@ -51,14 +52,14 @@ def train_gpt():
         logger = csv.DictWriter(log_f, fieldnames=["step", "loss"])
         logger.writeheader()
 
-        for t in range(10000):
+        for t in range(10001):
             model.train()
             optim.zero_grad()
 
             # Get data
             train_data = np.memmap(train_path, dtype=np.uint16, mode="r")
             inputs, targets = get_batch(
-                train_data, batch_size=8, context_length=256, device=device
+                train_data, batch_size=8, context_length=context_length, device=device
             )  # (batch_size, seq_len)
 
             inputs = inputs.to(device=device, dtype=torch.long)
@@ -69,7 +70,8 @@ def train_gpt():
 
             # Loss
             loss = cross_entropy(
-                rearrange(logits, "b s v -> (b s) v"), rearrange(targets, "b s -> (b s)")
+                rearrange(logits, "b s v -> (b s) v"),
+                rearrange(targets, "b s -> (b s)"),
             )
             loss.backward()
 
@@ -89,7 +91,9 @@ def train_gpt():
 
             if t % 1000 == 0:
                 print("=== Saving checkpoint ===")
-                save_checkpoint(model, optim, t, f"checkpoints/model/{t}.pth")
+                ckpt_dir = "checkpoints/model"
+                Path(ckpt_dir).mkdir(parents=True, exist_ok=True)
+                save_checkpoint(model, optim, t, f"{ckpt_dir}/{t}.pth")
 
 
 if __name__ == "__main__":

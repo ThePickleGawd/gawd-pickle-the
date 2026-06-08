@@ -429,7 +429,7 @@ class TransformerLM(nn.Module):
 
             token_ids = torch.cat((token_ids, sampled_token.view(1, 1)), dim=1)
 
-            if sampled_token == eos_token_id:
+            if eos_token_id is not None and sampled_token.item() == eos_token_id:
                 break
 
         return token_ids
