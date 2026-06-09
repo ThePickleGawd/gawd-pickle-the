@@ -13,18 +13,18 @@ from gpt.optim import AdamW, cross_entropy, gradient_clip
 from gpt.tokenizer.bpe import Tokenizer
 
 # Tokenizer
-vocab_path = "checkpoints/tokenizer/tinystories/vocab.txt"
-merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
+vocab_path = "checkpoints/tokenizer/owt/vocab.txt"
+merges_path = "checkpoints/tokenizer/owt/merges.txt"
 
 tokenizer = Tokenizer.from_files(vocab_path, merges_path)
 
 # Data
-train_path = "data/tinystories_train.npy"
+train_path = "data/owt_train.npy"
 
 # Settings
 device = "cuda"
 log_dir = "logs"
-log_every = 15
+log_every = 100
 context_length = 256
 
 
@@ -91,7 +91,7 @@ def train_gpt():
 
             if t % 1000 == 0:
                 print("=== Saving checkpoint ===")
-                ckpt_dir = "checkpoints/model"
+                ckpt_dir = "checkpoints/model/owt"
                 Path(ckpt_dir).mkdir(parents=True, exist_ok=True)
                 save_checkpoint(model, optim, t, f"{ckpt_dir}/{t}.pth")
 

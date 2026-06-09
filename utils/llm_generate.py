@@ -8,7 +8,7 @@ merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
 model_path = "checkpoints/model/9000.pth"
 special_tokens = ["<|endoftext|>"]
 
-prompt = "Once upon a time"
+prompt = "There once was a really cool guy named Dylan."
 max_new_tokens = 500
 temperature = 1.0
 top_p = 0.9

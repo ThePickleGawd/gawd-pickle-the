@@ -5,14 +5,14 @@ from tqdm import tqdm
 
 from gpt.tokenizer.bpe import Tokenizer
 
-vocab_path = "checkpoints/tokenizer/tinystories/vocab.txt"
-merges_path = "checkpoints/tokenizer/tinystories/merges.txt"
+vocab_path = "checkpoints/tokenizer/owt/vocab.txt"
+merges_path = "checkpoints/tokenizer/owt/merges.txt"
 special_tokens = ["<|endoftext|>"]
 
-input_data_path = "data/TinyStoriesV2-GPT4-train.txt"
-input_val_path = "data/TinyStoriesV2-GPT4-valid.txt"
-train_out_path = "data/tinystories_train.npy"
-val_out_path = "data/tinystories_val.npy"
+input_data_path = "data/owt_train.txt"
+input_val_path = "data/owt_valid.txt"
+train_out_path = "data/owt_train.npy"
+val_out_path = "data/owt_val.npy"
 
 t0 = time.time()
 
